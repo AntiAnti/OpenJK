@@ -299,28 +299,34 @@ qboolean G2_SetSurfaceOnOff(CGhoul2Info* ghlInfo, surfaceInfo_v& slist, const ch
 	return qfalse;
 }
 
-void G2_SetSurfaceOnOffFromSkin (CGhoul2Info *ghlInfo, qhandle_t renderSkin)
+void G2_SetSurfaceOnOffFromSkin(CGhoul2Info *ghlInfo, qhandle_t renderSkin)
 {
-	int j;
 	const skin_t *skin = R_GetSkinByHandle( renderSkin );
 
-	ghlInfo->mSlist.clear();	//remove any overrides we had before.
-	ghlInfo->mMeshFrameNum = 0;
+	//FIXME:  using skin handles means we have to increase the numsurfs in a skin, but reading directly would cause file hits, we need another way to cache or just deal with the larger skin_t
 
-	for ( j = 0 ; j < skin->numSurfaces ; j++ )
+	if (skin)
 	{
-		// the names have both been lowercased
-		//Raz: why is this using the shader name and not the surface name?
-		if ( !strcmp( ((shader_t *)skin->surfaces[j]->shader)->name, "*off") ) {
-			G2_SetSurfaceOnOff(ghlInfo, ghlInfo->mSlist, skin->surfaces[j]->name, G2SURFACEFLAG_OFF);
-		}
-		else 
+		ghlInfo->mSlist.clear(); // remove any overrides we had before.
+		ghlInfo->mMeshFrameNum = 0;
+
+		for (int j = 0; j < skin->numSurfaces; j++)
 		{
 			uint32_t flags;
 			int surfaceNum = G2_IsSurfaceLegal(ghlInfo->currentModel, skin->surfaces[j]->name, &flags);
-			if ( (surfaceNum != -1) && (!(flags & G2SURFACEFLAG_OFF)) )	//only turn on if it's not an "_off" surface
+
+			// the names have both been lowercased
+			if (!(flags & G2SURFACEFLAG_OFF) && !strcmp(((shader_t*)(skin->surfaces[j]->shader))->name, "*off"))
 			{
-				G2_SetSurfaceOnOff(ghlInfo, ghlInfo->mSlist, skin->surfaces[j]->name, 0);
+				G2_SetSurfaceOnOff(ghlInfo, skin->surfaces[j]->name, G2SURFACEFLAG_OFF);
+			}
+			else
+			{
+				// only turn on if it's not an "_off" surface
+				if ((surfaceNum != -1) && (!(flags & G2SURFACEFLAG_OFF)))
+				{
+					//G2_SetSurfaceOnOff(ghlInfo, skin->surfaces[j]->name, 0);
+				}
 			}
 		}
 	}

@@ -1,11 +1,7 @@
-//#include "ghoul2/G2.h"
-//#include "ghoul2/g2_local.h"
-//#include "tr_local.h"
-
-#include "../server/exe_headers.h"
+#include "server/exe_headers.h"
 
 #ifndef __Q_SHARED_H
-#include "../qcommon/q_shared.h"
+#include "qcommon/q_shared.h"
 #endif
 
 #if !defined(TR_LOCAL_H)
@@ -24,15 +20,14 @@
 // Given a bone number, see if that bone is already in our bone list
 int G2_Find_Bolt_Bone_Num(boltInfo_v &bltlist, const int boneNum)
 {
+	if (boneNum == -1)
+	{
+		return -1;
+	}
+
 	// look through entire list
 	for(size_t i=0; i<bltlist.size(); i++)
-	{
-		// if this bone entry has no info in it, bounce over it
-		if (bltlist[i].boneNumber == -1)
-		{
-			continue;
-		}
-
+	{		
 		if (bltlist[i].boneNumber == boneNum)
 		{
 			return i;
@@ -46,15 +41,14 @@ int G2_Find_Bolt_Bone_Num(boltInfo_v &bltlist, const int boneNum)
 // Given a bone number, see if that surface is already in our surfacelist list
 int G2_Find_Bolt_Surface_Num(boltInfo_v &bltlist, const int surfaceNum, const int flags)
 {
-	// look through entire list
-	for(size_t i=0; i<bltlist.size(); i++)
+	if (surfaceNum == -1)
 	{
-		// if this bone entry has no info in it, bounce over it
-		if (bltlist[i].surfaceNumber == -1)
-		{
-			continue;
-		}
+		return -1;
+	}
 
+	// look through entire list
+	for(size_t i = 0; i < bltlist.size(); i++)
+	{
 		if ((bltlist[i].surfaceNumber == surfaceNum) && ((bltlist[i].surfaceType & flags) == flags))
 		{
 			return i;
@@ -70,8 +64,9 @@ int G2_Find_Bolt_Surface_Num(boltInfo_v &bltlist, const int surfaceNum, const in
 int G2_Add_Bolt_Surf_Num(CGhoul2Info *ghlInfo, boltInfo_v &bltlist, surfaceInfo_v &slist, const int surfNum)
 {
 	assert(ghlInfo && ghlInfo->mValid);
-	boltInfo_t			tempBolt;
+	boltInfo_t tempBolt;
 
+	assert(surfNum >= 0 && surfNum < (int)slist.size());
 	// first up, make sure have a surface first
 	if (surfNum >= (int)slist.size())
 	{
@@ -118,13 +113,13 @@ int G2_Add_Bolt_Surf_Num(CGhoul2Info *ghlInfo, boltInfo_v &bltlist, surfaceInfo_
 int G2_Add_Bolt(CGhoul2Info *ghlInfo, boltInfo_v &bltlist, surfaceInfo_v &slist, const char *boneName)
 {
 	assert(ghlInfo && ghlInfo->mValid);
-	model_t		*mod_m = (model_t *)ghlInfo->currentModel;
-	model_t		*mod_a = (model_t *)ghlInfo->animModel;
-	int					x, surfNum = -1;
-	mdxaSkel_t			*skel;
-	mdxaSkelOffsets_t	*offsets;
-	boltInfo_t			tempBolt;
-	uint32_t			flags;
+	model_t* mod_m = (model_t*)ghlInfo->currentModel;
+	model_t* mod_a = (model_t*)ghlInfo->animModel;
+	int x, surfNum = -1;
+	mdxaSkel_t* skel;
+	mdxaSkelOffsets_t* offsets;
+	boltInfo_t tempBolt;
+	uint32_t flags;
 
 	// first up, we'll search for that which this bolt names in all the surfaces
 	surfNum = G2_IsSurfaceLegal(mod_m, boneName, &flags);
@@ -187,10 +182,6 @@ int G2_Add_Bolt(CGhoul2Info *ghlInfo, boltInfo_v &bltlist, surfaceInfo_v &slist,
 	if (x == mdxa->numBones)
 	{
 		// didn't find it? Error
-		//assert(0&&x == mod_a->mdxa->numBones);
-#ifdef _DEBUG
-//		Com_Printf("WARNING: %s not found on skeleton\n", boneName);
-#endif
 		return -1;
 	}
 
@@ -245,7 +236,7 @@ qboolean G2_Remove_Bolt (boltInfo_v &bltlist, int index)
 
 			unsigned int newSize = bltlist.size();
 			// now look through the list from the back and see if there is a block of -1's we can resize off the end of the list
-			for (int i=bltlist.size()-1; i>-1; i--)
+			for (int i = bltlist.size() - 1; i >- 1; i--)
 			{
 				if ((bltlist[i].surfaceNumber == -1) && (bltlist[i].boneNumber == -1))
 				{

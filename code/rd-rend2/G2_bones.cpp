@@ -1,20 +1,19 @@
 #include "server/exe_headers.h"
 
 #ifndef __Q_SHARED_H
-#include "qcommon/q_shared.h"
+	#include "qcommon/q_shared.h"
 #endif
 
 #if !defined(TR_LOCAL_H)
-#include "tr_local.h"
-#endif
-#if !defined(_QCOMMON_H_)
-#include "qcommon/qcommon.h"
+	#include "tr_local.h"
 #endif
 
-//#include "qcommon/matcomp.h"
+#if !defined(_QCOMMON_H_)
+	#include "qcommon/qcommon.h"
+#endif
 
 #if !defined(G2_H_INC)
-#include "ghoul2/G2.h"
+	#include "ghoul2/G2.h"
 #endif
 
 //rww - RAGDOLL_BEGIN
@@ -22,20 +21,17 @@
 #include "ghoul2/ghoul2_gore.h"
 //rww - RAGDOLL_END
 
-extern mdxaBone_t		worldMatrix;
-extern mdxaBone_t		worldMatrixInv;
+extern mdxaBone_t worldMatrix;
+extern mdxaBone_t worldMatrixInv;
 
 //////////////////////////////////
 
 //rww - RAGDOLL_BEGIN
 #ifndef __linux__
-#include <float.h>
+	#include <float.h>
 #else
-#include <math.h>
+	#include <math.h>
 #endif 
-//#include "ghoul2/G2_gore.h"
-
-//#define RAG_TRACE_DEBUG_LINES
 
 #include "client/client.h" //while this is all "shared" code, there are some places where we want to make cgame callbacks (for ragdoll) only if the cgvm exists
 //rww - RAGDOLL_END
@@ -60,6 +56,7 @@ extern mdxaBone_t		worldMatrixInv;
 #define		GHOUL2_RAG_COLLISION_SLIDE				0x0800		// ever have gotten a collision (slide) event
 #define		GHOUL2_RAG_FORCESOLVE					0x1000		//api-override, determine if ragdoll should be forced to continue solving even if it thinks it is settled
 
+// functions predefinition
 static void G2_DoIK(CGhoul2Info_v& ghoul2V, int g2Index, CRagDollUpdateParams* params);
 static void G2_RagDoll(CGhoul2Info_v& ghoul2V, int g2Index, CRagDollUpdateParams* params, int curTime);
 
@@ -147,7 +144,7 @@ int G2_Add_Bone (const model_t *mod, boneInfo_v &blist, const char *boneName)
    	offsets = (mdxaSkelOffsets_t *)((byte *)mdxa + sizeof(mdxaHeader_t));
 
  	// walk the entire list of bones in the gla file for this model and see if any match the name of the bone we want to find
- 	for (x=0; x< mdxa->numBones; x++)
+ 	for (x = 0; x < mdxa->numBones; x++)
  	{
  		skel = (mdxaSkel_t *)((byte *)mdxa + sizeof(mdxaHeader_t) + offsets->offsets[x]);
  		// if name is the same, we found it
@@ -165,15 +162,11 @@ int G2_Add_Bone (const model_t *mod, boneInfo_v &blist, const char *boneName)
 #ifdef _DEBUG
 		Com_Printf("WARNING: Failed to add bone %s\n", boneName);
 #endif
-
-#ifdef _RAG_PRINT_TEST
-		Com_Printf("WARNING: Failed to add bone %s\n", boneName);
-#endif
 		return -1;
 	}
 
 	// look through entire list - see if it's already there first
-	for(size_t i=0; i<blist.size(); i++)
+	for(size_t i = 0; i < blist.size(); i++)
 	{
 		// if this bone entry has info in it, bounce over it
 		if (blist[i].boneNumber != -1)
@@ -201,13 +194,14 @@ int G2_Add_Bone (const model_t *mod, boneInfo_v &blist, const char *boneName)
 	tempBone.boneNumber = x;
 	tempBone.flags = 0;
 	blist.push_back(tempBone);
-	return blist.size()-1;
+	return blist.size() - 1;
 }
 
 
 // Given a model handle, and a bone name, we want to remove this bone from the bone override list
-qboolean G2_Remove_Bone_Index ( boneInfo_v &blist, int index)
+qboolean G2_Remove_Bone_Index (boneInfo_v &blist, int index)
 {
+	/*
 	if (index != -1)
 	{
 		if (blist[index].flags & BONE_ANGLES_RAGDOLL)
@@ -215,6 +209,7 @@ qboolean G2_Remove_Bone_Index ( boneInfo_v &blist, int index)
 			return qtrue; // don't accept any calls on ragdoll bones
 		}
 	}
+	*/
 
 	// did we find it?
 	if (index != -1)
@@ -222,7 +217,6 @@ qboolean G2_Remove_Bone_Index ( boneInfo_v &blist, int index)
 		// check the flags first - if it's still being used Do NOT remove it
 		if (!blist[index].flags)
 		{
-
 			// set this bone to not used
 			blist[index].boneNumber = -1;
 
@@ -251,8 +245,6 @@ qboolean G2_Remove_Bone_Index ( boneInfo_v &blist, int index)
 		}
 	}
 
-//	assert(0);
-	// no
 	return qfalse;
 }
 
@@ -271,7 +263,7 @@ int	G2_Find_Bone_In_List(boneInfo_v &blist, const int boneNum)
 }
 
 // given a model, bonelist and bonename, lets stop an anim if it's playing.
-qboolean G2_Stop_Bone_Index( boneInfo_v &blist, int index, int flags)
+qboolean G2_Stop_Bone_Index(boneInfo_v &blist, int index, int flags)
 {
 	// did we find it?
 	if (index != -1)
@@ -282,7 +274,6 @@ qboolean G2_Stop_Bone_Index( boneInfo_v &blist, int index, int flags)
 	}
 
 	assert(0);
-
 	return qfalse;
 }
 
@@ -495,10 +486,8 @@ void G2_Generate_Matrix(const model_t *mod, boneInfo_v &blist, int index, const 
 // Given a model handle, and a bone name, we want to remove this bone from the bone override list
 qboolean G2_Remove_Bone (CGhoul2Info *ghlInfo, boneInfo_v &blist, const char *boneName)
 {
-	int index;
-
 	assert(ghlInfo->animModel);
-	index = G2_Find_Bone(ghlInfo->animModel, blist, boneName);
+	int index = G2_Find_Bone(ghlInfo->animModel, blist, boneName);
  
 	return G2_Remove_Bone_Index(blist, index);
 }

@@ -160,8 +160,8 @@ CGoreSet *NewGoreSet()
 
 void DeleteGoreSet(int goreSetTag)
 {
-	std::map<int,CGoreSet *>::iterator f=GoreSets.find(goreSetTag);
-	if (f!=GoreSets.end())
+	std::map<int,CGoreSet *>::iterator f = GoreSets.find(goreSetTag);
+	if (f != GoreSets.end())
 	{
 		if ( (*f).second->mRefCount == 0 || (*f).second->mRefCount - 1 == 0 )
 		{
