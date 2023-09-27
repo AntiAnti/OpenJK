@@ -284,6 +284,13 @@ typedef enum {
 #define UI_INVERSE		0x00002000
 #define UI_PULSE		0x00004000
 
+typedef enum {
+	h_high,
+	h_low,
+	h_dontcare
+} ha_pref;
+
+void *Hunk_Alloc( int size, ha_pref preference );
 
 #define Com_Memset memset
 #define Com_Memcpy memcpy
@@ -340,8 +347,8 @@ qboolean COM_CompareExtension(const char *in, const char *ext);
 void	COM_DefaultExtension( char *path, int maxSize, const char *extension );
 
 //JLFCALLOUT include MPNOTUSED
-void	 COM_BeginParseSession( void );
-void	 COM_EndParseSession( void );
+void	COM_BeginParseSession( void );
+void	COM_EndParseSession( void );
 
 // For compatibility with shared code
 QINLINE void COM_BeginParseSession( const char *sessionName )
@@ -355,7 +362,7 @@ public:
 	~COM_ParseSession() { COM_EndParseSession(); };
 };
 
-int		 COM_GetCurrentParseLine( void );
+int		 COM_GetCurrentParseLine(int index = 0);
 char	*COM_Parse( const char **data_p );
 char	*COM_ParseExt( const char **data_p, qboolean allowLineBreak );
 int		 COM_Compress( char *data_p );
@@ -368,6 +375,7 @@ qboolean COM_ParseVec4( const char **buffer, vec4_t *c);
 
 void	COM_MatchToken( char**buf_p, char *match );
 
+qboolean SkipBracedSection (const char **program, int depth);
 void SkipBracedSection (const char **program);
 void SkipRestOfLine ( const char **data );
 
@@ -429,6 +437,7 @@ default values.
 ==========================================================
 */
 
+#define	CVAR_NONE			(0x00000000u)
 #define	CVAR_TEMP			0	// can be set even when cheats are disabled, but is not archived
 #define	CVAR_ARCHIVE		1	// set to cause it to be saved to vars.rc
 								// used for system variables, not for player

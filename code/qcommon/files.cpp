@@ -1689,7 +1689,7 @@ CONVENIENCE FUNCTIONS FOR ENTIRE FILES
 ======================================================================================
 */
 
-int	FS_FileIsInPAK(const char *filename ) {
+int	FS_FileIsInPAK(const char *filename, int* pChecksum) {
 	searchpath_t	*search;
 	pack_t			*pak;
 	fileInPack_t	*pakFile;
@@ -1730,6 +1730,9 @@ int	FS_FileIsInPAK(const char *filename ) {
 			do {
 				// case and separator insensitive comparisons
 				if ( !FS_FilenameCompare( pakFile->name, filename ) ) {
+					if (pChecksum) {
+						*pChecksum = 1;// pak->pure_checksum;
+					}
 					return 1;
 				}
 				pakFile = pakFile->next;

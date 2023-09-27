@@ -22,13 +22,21 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 ===========================================================================
 */
 
+/*
+-- A note for myself
+refimport_t is a global rendering API interface, which connects the game and dedecated rendering library (vanilla renderer, rend2, vulcan, add more).
+
+Pointers to rendering functions (to use on the client side) are initialized by the renderer in the [renderer dir]/tr_init.cpp - GetRefAPI function
+Other functions (to use by renderer, memory control functions in particular) are initialized in the client/cl_main.cpp - CL_InitRef function
+*/
+
 #pragma once
 
 #include "tr_types.h"
-#include "../qcommon/qcommon.h"
-
-#include "../ghoul2/G2.h"
-#include "../ghoul2/ghoul2_gore.h"
+#include "qcommon/qcommon.h"
+#include "qcommon/q_shared.h"
+#include "ghoul2/G2.h"
+#include "ghoul2/ghoul2_gore.h"
 
 #define	REF_API_VERSION		18
 
@@ -155,6 +163,13 @@ typedef struct {
 	int		  (*GetAnimationCFG)(const char *psCFGFilename, char *psDest, int iDestSize);
 	qhandle_t (*RegisterShader)( const char *name );
 	qhandle_t (*RegisterShaderNoMip)( const char *name );
+	//Rend2 - START
+	void(*ClearDecals)(void);
+	void(*AddDecalToScene)(qhandle_t shader, const vec3_t origin, const vec3_t dir, float orientation, float r, float g, float b, float a, qboolean alphaFade, float radius, qboolean temporary);
+	int(*LightForPoint)(vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir);
+	void(*AddAdditiveLightToScene)(const vec3_t org, float intensity, float r, float g, float b);
+	qboolean(*GetEntityToken)(char* buffer, int size);
+	//Rend2 - END
 	void	(*LoadWorld)( const char *name );
 	void	(*R_LoadImage)( const char *name, byte **pic, int *width, int *height );
 

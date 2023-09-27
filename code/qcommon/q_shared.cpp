@@ -126,7 +126,7 @@ PARSING
 static	char	com_token[MAX_TOKEN_CHARS];
 //JLFCALLOUT MPNOTUSED
 int parseDataCount = -1;
-const int MAX_PARSE_DATA = 5;
+const int MAX_PARSE_DATA = 1024;
 parseData_t parseData[MAX_PARSE_DATA];
 
 void COM_ParseInit( void )
@@ -516,6 +516,33 @@ void SkipBracedSection ( const char **program) {
 		}
 
 	} while (depth && *program);
+}
+
+/*
+=================
+SkipBracedSection
+
+The next token should be an open brace or set depth to 1 if already parsed it.
+Skips until a matching close brace is found.
+Internal brace depths are properly skipped.
+=================
+*/
+qboolean SkipBracedSection (const char **program, int depth) {
+	char			*token;
+
+	do {
+		token = COM_ParseExt( program, qtrue );
+		if( token[1] == 0 ) {
+			if( token[0] == '{' ) {
+				depth++;
+			}
+			else if( token[0] == '}' ) {
+				depth--;
+			}
+		}
+	} while( depth && *program );
+
+	return (qboolean)( depth == 0 );
 }
 
 /*

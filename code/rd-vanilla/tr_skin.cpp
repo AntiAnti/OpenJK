@@ -322,7 +322,7 @@ qhandle_t RE_RegisterIndividualSkin( const char *name , qhandle_t hSkin)
 			ri.Printf( PRINT_WARNING, "WARNING: RE_RegisterSkin( '%s' ) more than %u surfaces!\n", name, (unsigned int)ARRAY_LEN(skin->surfaces) );
 			break;
 		}
-		surf = skin->surfaces[ skin->numSurfaces ] = (skinSurface_t *) R_Hunk_Alloc( sizeof( *skin->surfaces[0] ), qtrue );
+		surf = skin->surfaces[skin->numSurfaces] = (skinSurface_t*)R_Hunk_Alloc(sizeof(*skin->surfaces[0]), qtrue);
 		Q_strncpyz( surf->name, surfName, sizeof( surf->name ) );
 		surf->shader = R_FindShader( token, lightmapsNone, stylesDefault, qtrue );
 		skin->numSurfaces++;
@@ -477,8 +477,9 @@ void	R_SkinList_f (void) {
 		skin = tr.skins[i];
 		ri.Printf( PRINT_ALL, "%3i:%s\n", i, skin->name );
 		for ( j = 0 ; j < skin->numSurfaces ; j++ ) {
+			const shader_t* shader_ptr = (shader_t*)(skin->surfaces[j]->shader);
 			ri.Printf( PRINT_ALL, "       %s = %s\n",
-				skin->surfaces[j]->name, skin->surfaces[j]->shader->name );
+				skin->surfaces[j]->name, shader_ptr->name );
 		}
 	}
 	ri.Printf (PRINT_ALL, "------------------\n");

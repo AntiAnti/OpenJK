@@ -487,10 +487,10 @@ long		FS_FOpenFileRead( const char *qpath, fileHandle_t *file, qboolean uniqueFI
 // file IO goes through FS_ReadFile, which Does The Right Thing already.
 
 // returns 1 if a file is in the PAK file, otherwise -1
-int	FS_FileIsInPAK(const char *filename );
-static inline int FS_FileIsInPAK( const char *filename, int *checksum )
+int	FS_FileIsInPAK(const char *filename, int* checksum);
+static inline int FS_FileIsInPAK( const char *filename )
 {
-	return FS_FileIsInPAK( filename );
+	return FS_FileIsInPAK( filename, nullptr );
 }
 
 int	FS_Write( const void *buffer, int len, fileHandle_t f );
@@ -670,6 +670,16 @@ int	  Z_Size	( void *pvAddress);
 void  Z_MorphMallocTag( void *pvAddress, memtag_t eDesiredTag );
 qboolean Z_IsFromZone(const void *pvAddress, memtag_t eTag);	//returns size if true
 
+/*
+#ifdef DEBUG_ZONE_ALLOCS
+void* Z_Malloc(int iSize, memtag_t eTag, qboolean bZeroit = qfalse, int iAlign = 4);	// return memory NOT zero-filled by default
+void* S_Malloc(int iSize);					// NOT 0 filled memory only for small allocations
+#else
+void* Z_Malloc(int iSize, memtag_t eTag, qboolean bZeroit = qfalse, int iAlign = 4);	// return memory NOT zero-filled by default
+void* S_Malloc(int iSize);					// NOT 0 filled memory only for small allocations
+#endif
+*/
+
 #ifdef DEBUG_ZONE_ALLOCS
 
 void *_D_Z_Malloc( int iSize, memtag_t eTag, qboolean bZeroit, const char *psFile, int iLine );
@@ -693,6 +703,12 @@ void Com_InitZoneMemoryVars(void);
 void Hunk_Clear( void );
 void Hunk_ClearToMark( void );
 void Hunk_SetMark( void );
+
+void Hunk_ClearTempMemory(void);
+void* Hunk_AllocateTempMemory(int size);
+void Hunk_FreeTempMemory(void* buf);
+int	Hunk_MemoryRemaining(void);
+
 // note the opposite default for 'bZeroIt' in Hunk_Alloc to Z_Malloc, since Hunk_Alloc always used to memset(0)...
 //
 inline void *Hunk_Alloc( int size, qboolean bZeroIt = qtrue);
@@ -768,6 +784,8 @@ void S_ClearSoundBuffer( void );
 
 void SCR_DebugGraph (float value, int color);	// FIXME: move logging to common?
 
+// AVI files have the start of pixel lines 4 byte-aligned
+#define AVI_LINE_PADDING 4
 
 //
 // server interface

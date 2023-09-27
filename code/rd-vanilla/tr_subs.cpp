@@ -78,7 +78,8 @@ void Com_DPrintf(const char *format, ...)
 
 // ZONE
 
-void *R_Malloc( int iSize, memtag_t eTag, qboolean bZeroit ) {
+void* R_Malloc(int iSize, memtag_t eTag, qboolean bZeroit)
+{
 	return ri.Malloc( iSize, eTag, bZeroit, 4 );
 }
 

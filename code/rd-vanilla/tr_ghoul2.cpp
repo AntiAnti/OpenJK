@@ -2219,7 +2219,7 @@ void G2API_SetSurfaceOnOffFromSkin (CGhoul2Info *ghlInfo, qhandle_t renderSkin)
 			uint32_t flags;
 			int surfaceNum = G2_IsSurfaceLegal(ghlInfo->currentModel, skin->surfaces[j]->name, &flags);
 			// the names have both been lowercased
-			if ( !(flags&G2SURFACEFLAG_OFF) && !strcmp( skin->surfaces[j]->shader->name , "*off") )
+			if ( !(flags&G2SURFACEFLAG_OFF) && !strcmp(((shader_t*)(skin->surfaces[j]->shader))->name , "*off") )
 			{
 				G2_SetSurfaceOnOff(ghlInfo, skin->surfaces[j]->name, G2SURFACEFLAG_OFF);
 			}
@@ -2283,7 +2283,7 @@ void RenderSurfaces(CRenderSurface &RS)
 				// the names have both been lowercased
 				if ( !strcmp( RS.skin->surfaces[j]->name, surfInfo->name ) )
 				{
-					shader = RS.skin->surfaces[j]->shader;
+					shader = (shader_t*)RS.skin->surfaces[j]->shader;
 					break;
 				}
 			}

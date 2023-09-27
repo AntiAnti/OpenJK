@@ -87,6 +87,13 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define RDF_doFullbright	64		// Light Amp goggles
 #define RDF_ForceSightOn	128		// using force sight
 
+#define	GHOUL2_CRAZY_SMOOTH			0x2000		// hack for smoothing during ugly situations. forgive me.
+#define	BONE_NEED_TRANSFORM			0x8000
+#define RDF_AUTOMAP					32			// means this scene is to draw the automap -rww
+#define RF_FORCEPOST				0x200000	// force it to post-render -rww
+#define	RF_MINLIGHT					0x00001		// allways have some light (viewmodel, some items)
+#define RF_ALPHA_DEPTH				0x100000	// depth write on alpha model
+#define	RDF_NOFOG					64			// no global fog in this scene (but still brush fog) -rww
 
 extern int	skyboxportal;
 extern int	drawskyboxportal;
@@ -198,7 +205,7 @@ typedef struct {
 	byte		areamask[MAX_MAP_AREA_BYTES];
 
 	// text messages for deform text shaders
-//	char		text[MAX_RENDER_STRINGS][MAX_RENDER_STRING_LENGTH];
+	char		text[MAX_RENDER_STRINGS][MAX_RENDER_STRING_LENGTH];
 } refdef_t;
 
 
@@ -219,7 +226,8 @@ typedef enum {
 typedef enum {
 	TC_NONE,
 	TC_S3TC,
-	TC_S3TC_DXT
+	TC_S3TC_DXT,
+	TC_S3TC_ARB
 } textureCompression_t;
 
 typedef struct glconfig_s {

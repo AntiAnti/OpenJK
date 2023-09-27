@@ -1,4 +1,4 @@
-/*
+	/*
 ===========================================================================
 Copyright (C) 2000 - 2013, Raven Software, Inc.
 Copyright (C) 2001 - 2013, Activision, Inc.
@@ -113,7 +113,7 @@ void		G2_TransformModel(CGhoul2Info_v &ghoul2, const int frameNum, vec3_t scale,
 void		G2_GenerateWorldMatrix(const vec3_t angles, const vec3_t origin);
 void		TransformPoint (const vec3_t in, vec3_t out, mdxaBone_t *mat);
 void		Inverse_Matrix(mdxaBone_t *src, mdxaBone_t *dest);
-void		*G2_FindSurface(const model_s *, int index, int lod);
+void*		G2_FindSurface(const model_s*, int index, int lod);
 void		G2_SaveGhoul2Models(CGhoul2Info_v &ghoul2);
 void		G2_LoadGhoul2Model(CGhoul2Info_v &ghoul2, char *buffer);
 
@@ -155,11 +155,10 @@ qboolean	G2API_PauseBoneAnimIndex(CGhoul2Info *ghlInfo, const int boneIndex, con
 qboolean	G2API_IsPaused(CGhoul2Info *ghlInfo, const char *boneName);
 qboolean	G2API_StopBoneAnim(CGhoul2Info *ghlInfo, const char *boneName);
 qboolean	G2API_SetBoneAngles(CGhoul2Info *ghlInfo, const char *boneName, const vec3_t angles, const int flags,
-								const Eorientations up, const Eorientations right, const Eorientations forward, qhandle_t *modelList,
+								const Eorientations up, const Eorientations right, const Eorientations forward, qhandle_t* modelList,
 								int blendTime = 0, int currentTime = 0);
 qboolean	G2API_StopBoneAngles(CGhoul2Info *ghlInfo, const char *boneName);
-qboolean	G2API_RemoveBone(CGhoul2Info *ghlInfo, const char *boneName);
-qboolean	G2API_RemoveBolt(CGhoul2Info *ghlInfo, const int index);
+qboolean	G2API_RemoveBone(CGhoul2Info *ghlInfo, const char *boneName);qboolean	G2API_RemoveBolt(CGhoul2Info *ghlInfo, const int index);
 int			G2API_AddBolt(CGhoul2Info *ghlInfo, const char *boneName);
 int			G2API_AddBoltSurfNum(CGhoul2Info *ghlInfo, const int surfIndex);
 qboolean	G2API_AttachG2Model(CGhoul2Info *ghlInfo, CGhoul2Info *ghlInfoTo, int toBoltIndex, int toModel);
@@ -215,8 +214,8 @@ void		G2_GetBoltMatrixLow(CGhoul2Info &ghoul2,int boltNum,const vec3_t scale,mdx
 void		G2_TimingModel(boneInfo_t &bone,int time,int numFramesInFile,int &currentFrame,int &newFrame,float &lerp);
 
 
-bool G2_SetupModelPointers(CGhoul2Info_v &ghoul2); // returns true if any model is properly set up
-bool G2_SetupModelPointers(CGhoul2Info *ghlInfo); // returns true if the model is properly set up
+qboolean G2_SetupModelPointers(CGhoul2Info_v &ghoul2); // returns true if any model is properly set up
+qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo); // returns true if the model is properly set up
 
 //#ifdef _G2_GORE	// These exist regardless, non-gore versions are empty
 void		G2API_AddSkinGore(CGhoul2Info_v &ghoul2,SSkinGoreData &gore);
