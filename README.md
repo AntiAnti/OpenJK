@@ -97,3 +97,9 @@ If you have the Mac App Store Version of Jedi Academy, follow these steps to get
 * Scooper
 * Sil
 * smcv
+
+# Rend2 for SP
+
+Rend2 renderer is developed by [SomaZ](https://github.com/SomaZ/OpenJK/).
+
+The goal of this project is to enable rend2 in SP game.
