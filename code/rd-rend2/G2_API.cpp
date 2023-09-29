@@ -2432,11 +2432,8 @@ qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the mode
 		G2ERROR(ghlInfo->mFileName[0],"empty ghlInfo->mFileName");
 
 		// RJ - experimental optimization!
-		if (!ghlInfo->mModel || 1)
-		{	
-			ghlInfo->mModel = RE_RegisterModel(ghlInfo->mFileName);
-			ghlInfo->currentModel = R_GetModelByHandle(ghlInfo->mModel);
-		}
+		ghlInfo->mModel = RE_RegisterModel(ghlInfo->mFileName);
+		ghlInfo->currentModel = R_GetModelByHandle(ghlInfo->mModel);
 
 		G2ERROR(ghlInfo->currentModel,va("NULL Model (glm) %s",ghlInfo->mFileName));
 

@@ -223,7 +223,7 @@ cvar_t	*r_saveFontData;
 cvar_t	*r_noPrecacheGLA;
 #endif
 
-cvar_t	*r_noServerGhoul2;
+cvar_t	*r_noGhoul2;
 cvar_t	*r_Ghoul2AnimSmooth=0;
 cvar_t	*r_Ghoul2UnSqashAfterSmooth=0;
 //cvar_t	*r_Ghoul2UnSqash;
@@ -275,6 +275,11 @@ cvar_t *r_debugWeather;
 cvar_t	*r_aspectCorrectFonts;
 
 cvar_t* com_buildScript;
+cvar_t* sv_mapname;
+cvar_t* sv_mapChecksum;
+cvar_t* r_modelpoolmegs;
+cvar_t* r_environmentMapping;
+cvar_t* r_ext_compressed_lightmaps;
 
 #define ri_Cvar_Get_NoComm(varname, value, flag, comment) ri.Cvar_Get(varname, value, flag)
 
@@ -1456,6 +1461,7 @@ void R_Register( void )
 	//
 	r_allowExtensions = ri_Cvar_Get_NoComm( "r_allowExtensions", "1", CVAR_ARCHIVE | CVAR_LATCH, "Allow GL extensions" );
 	r_ext_compressed_textures = ri_Cvar_Get_NoComm( "r_ext_compress_textures", "0", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable texture compression" );
+	r_ext_compressed_lightmaps = ri.Cvar_Get("r_ext_compress_lightmaps", "0", CVAR_ARCHIVE_ND | CVAR_LATCH);
 	r_ext_multitexture = ri_Cvar_Get_NoComm( "r_ext_multitexture", "1", CVAR_ARCHIVE | CVAR_LATCH, "Unused" );
 	r_ext_compiled_vertex_array = ri_Cvar_Get_NoComm( "r_ext_compiled_vertex_array", "1", CVAR_ARCHIVE | CVAR_LATCH, "Unused" );
 	r_ext_texture_env_add = ri_Cvar_Get_NoComm( "r_ext_texture_env_add", "1", CVAR_ARCHIVE | CVAR_LATCH, "Unused" );
@@ -1655,7 +1661,7 @@ void R_Register( void )
 #ifdef _DEBUG
 	r_noPrecacheGLA						= ri_Cvar_Get_NoComm( "r_noPrecacheGLA",				"0",						CVAR_CHEAT, "" );
 #endif
-	r_noServerGhoul2					= ri_Cvar_Get_NoComm( "r_noserverghoul2",				"0",						CVAR_CHEAT, "" );
+	r_noGhoul2							= ri_Cvar_Get_NoComm( "r_noghoul2",				"0",						CVAR_CHEAT, "" );
 	r_Ghoul2AnimSmooth					= ri_Cvar_Get_NoComm( "r_ghoul2animsmooth",			"0.3",						CVAR_NONE, "" );
 	r_Ghoul2UnSqashAfterSmooth			= ri_Cvar_Get_NoComm( "r_ghoul2unsqashaftersmooth",	"1",						CVAR_NONE, "" );
 	broadsword							= ri_Cvar_Get_NoComm( "broadsword",					"0",						CVAR_ARCHIVE, "" );
@@ -1679,6 +1685,14 @@ void R_Register( void )
 	// added for SP
 	// @TODO add all cvars from vanilla
 	com_buildScript = ri.Cvar_Get("com_buildScript", "0", 0);
+	sv_mapname = ri.Cvar_Get("mapname", "nomap", CVAR_SERVERINFO | CVAR_ROM);
+	sv_mapChecksum = ri.Cvar_Get("sv_mapChecksum", "", CVAR_ROM);
+	r_modelpoolmegs = ri.Cvar_Get("r_modelpoolmegs", "20", CVAR_ARCHIVE);
+	if (ri.LowPhysicalMemory())
+	{
+		ri.Cvar_Set("r_modelpoolmegs", "0");
+	}
+	r_environmentMapping = ri.Cvar_Get("r_environmentMapping", "1", CVAR_ARCHIVE_ND);
 
 	for ( size_t i = 0; i < numCommands; i++ )
 		ri.Cmd_AddCommand( commands[i].cmd, commands[i].func );
@@ -2036,7 +2050,7 @@ void R_Init( void ) {
 
 	GLSL_LoadGPUShaders();
 
-	R_InitShaders (qfalse);
+	R_InitShaders();
 
 	R_InitSkins();
 
@@ -2207,6 +2221,8 @@ void C_LevelLoadEnd( void )
 	CModelCache->LevelLoadEnd( qfalse );
 	ri.SND_RegisterAudio_LevelLoadEnd( qfalse );
 	ri.S_RestartMusic();
+
+	*(ri.gbAlreadyDoingLoad()) = qfalse;
 }
 
 /*

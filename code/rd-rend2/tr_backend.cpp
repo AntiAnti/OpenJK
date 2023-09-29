@@ -1180,10 +1180,7 @@ static void RB_PrepareForEntity( int entityNum, float originalTime )
 	tess.shaderTime = backEnd.refdef.floatTime - tess.shader->timeOffset;
 }
 
-static void RB_SubmitDrawSurfsForDepthFill(
-	drawSurf_t *drawSurfs,
-	int numDrawSurfs,
-	float originalTime )
+static void RB_SubmitDrawSurfsForDepthFill(drawSurf_t *drawSurfs, int numDrawSurfs, float originalTime)
 {
 	shader_t *oldShader = nullptr;
 	int oldEntityNum = -1;

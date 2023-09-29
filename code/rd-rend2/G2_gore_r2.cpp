@@ -27,7 +27,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 R2GoreTextureCoordinates::R2GoreTextureCoordinates()
 {
-	Com_Memset (tex, 0, sizeof (tex));
+	Com_Memset (tex_new, 0, sizeof (tex));
 }
 
 R2GoreTextureCoordinates::~R2GoreTextureCoordinates()
@@ -36,12 +36,12 @@ R2GoreTextureCoordinates::~R2GoreTextureCoordinates()
 	{
 		if ( tex[i] )
 		{
-			ri.Z_Free(tex[i]->verts);
-			tex[i]->verts = NULL;
-			ri.Z_Free(tex[i]->indexes);
-			tex[i]->indexes = NULL;
-			ri.Z_Free(tex[i]);
-			tex[i] = NULL;
+			ri.Z_Free(tex_new[i]->verts);
+			tex_new[i]->verts = NULL;
+			ri.Z_Free(tex_new[i]->indexes);
+			tex_new[i]->indexes = NULL;
+			ri.Z_Free(tex_new[i]);
+			tex_new[i] = NULL;
 		}
 	}
 }

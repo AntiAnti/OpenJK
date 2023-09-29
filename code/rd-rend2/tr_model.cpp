@@ -68,22 +68,24 @@ qhandle_t R_RegisterMD3(const char *name, model_t *mod)
 			Com_sprintf(namebuf, sizeof(namebuf), "%s.%s", filename, fext);
 
 		qboolean bAlreadyCached = qfalse;
-		if( !CModelCache->LoadFile( namebuf, (void**)&buf, &bAlreadyCached ) )
+		if (!CModelCache->LoadFile(namebuf, (void**)&buf, &bAlreadyCached))
+		{
 			continue;
+		}
 
-		ident = *(unsigned *)buf;
+		ident = *(unsigned*)buf;
 		if( !bAlreadyCached )
 			LL(ident);
 		
 		switch(ident)
 		{
-			case MD3_IDENT:
+			case MD3_IDENT: // 3PDI (static mesh)
 				loaded = R_LoadMD3(mod, lod, buf, namebuf);
 				break;
-			case MDXA_IDENT:
+			case MDXA_IDENT: // AGL2 = GLA (skinnned mesh animation)
 				loaded = R_LoadMDXA(mod, buf, namebuf, bAlreadyCached);
 				break;
-			case MDXM_IDENT:
+			case MDXM_IDENT: // MGL2 = GLM (skinned mesh)
 				loaded = R_LoadMDXM(mod, buf, name, bAlreadyCached);
 				break;
 			default:
@@ -91,16 +93,18 @@ qhandle_t R_RegisterMD3(const char *name, model_t *mod)
 				break;
 		}
 
-		if(loaded)
+		if (loaded)
 		{
 			mod->numLods++;
 			numLoaded++;
 		}
 		else
+		{
 			break;
+		}
 	}
 
-	if(numLoaded)
+	if (numLoaded)
 	{
 		// duplicate into higher lod spots that weren't
 		// loaded, in case the user changes r_lodbias on the fly
@@ -223,17 +227,14 @@ static int numModelLoaders = ARRAY_LEN(modelLoaders);
 /*
 ** R_GetModelByHandle
 */
-model_t	*R_GetModelByHandle( qhandle_t index ) {
-	model_t		*mod;
-
+model_t* R_GetModelByHandle(qhandle_t index)
+{
 	// out of range gets the defualt model
-	if ( index < 1 || index >= tr.numModels ) {
+	if ( index < 1 || index >= tr.numModels )
+	{
 		return tr.models[0];
 	}
-
-	mod = tr.models[index];
-
-	return mod;
+	return tr.models[index];
 }
 
 //===============================================================================
@@ -241,14 +242,14 @@ model_t	*R_GetModelByHandle( qhandle_t index ) {
 /*
 ** R_AllocModel
 */
-model_t *R_AllocModel( void ) {
-	model_t		*mod;
-
-	if ( tr.numModels == MAX_MOD_KNOWN ) {
+model_t* R_AllocModel( void )
+{
+	if (tr.numModels == MAX_MOD_KNOWN)
+	{
 		return NULL;
 	}
 
-	mod = (model_t *)R2_Hunk_Alloc( sizeof( *tr.models[tr.numModels] ), h_low );
+	model_t* mod = (model_t*)R2_Hunk_Alloc(sizeof( *tr.models[tr.numModels] ), h_low );
 	mod->index = tr.numModels;
 	tr.models[tr.numModels] = mod;
 	tr.numModels++;
@@ -292,7 +293,7 @@ optimization to prevent disk rescanning if they are
 asked for again.
 ====================
 */
-qhandle_t RE_RegisterModel( const char *name ) {
+qhandle_t RE_RegisterModel(const char *name) {
 	model_t		*mod;
 	qhandle_t	hModel;
 	qboolean	orgNameFailed = qfalse;
@@ -302,34 +303,42 @@ qhandle_t RE_RegisterModel( const char *name ) {
 	const char	*ext;
 	char		altName[ MAX_QPATH ];
 
-	if ( !name || !name[0] ) {
+	if (!name || !name[0])
+	{
 		ri.Printf( PRINT_ALL, "RE_RegisterModel: NULL name\n" );
-		return 0;
+		return NULL;
 	}
 
-	if ( strlen( name ) >= MAX_QPATH ) {
-		ri.Printf( PRINT_ALL, "Model name exceeds MAX_QPATH\n" );
-		return 0;
+	if (strlen(name) >= MAX_QPATH)
+	{
+		ri.Printf( PRINT_ALL, "Model name exceeds MAX_QPATH (%s)\n", name );
+		return NULL;
 	}
 
 	// search the currently loaded models
-	if( ( hModel = CModelCache->GetModelHandle( name ) ) != -1 )
-		return hModel;
-
-	if ( name[0] == '*' )
+	hModel = CModelCache->GetModelHandle(name);
+	if (hModel != -1)
 	{
-		if ( strcmp (name, "*default.gla") != 0 )
+		return hModel;
+	}
+
+	/*
+	if (name[0] == '*')
+	{
+		if (strcmp(name, "*default.gla") != 0)
 		{
 			return 0;
 		}
 	}
+	*/
 
-	if( name[0] == '#' )
+	// Load world geometry
+	if (name[0] == '#')
 	{
 		return RE_RegisterBSP(name);
 	}
 
-	// allocate a new model_t
+	// Allocate a new model_t
 	if ( ( mod = R_AllocModel() ) == NULL ) {
 		ri.Printf( PRINT_WARNING, "RE_RegisterModel: R_AllocModel() failed for '%s'\n", name);
 		return 0;
@@ -348,36 +357,37 @@ qhandle_t RE_RegisterModel( const char *name ) {
 	//
 	Q_strncpyz( localName, name, MAX_QPATH );
 
-	ext = COM_GetExtension( localName );
-
-	if( *ext )
+	// get file format
+	ext = COM_GetExtension(localName);
+	if (*ext)
 	{
 		// Look for the correct loader and use it
-		for( i = 0; i < numModelLoaders; i++ )
+		for (i = 0; i < numModelLoaders; i++)
 		{
-			if( !Q_stricmp( ext, modelLoaders[ i ].ext ) )
+			if (!Q_stricmp(ext, modelLoaders[ i ].ext))
 			{
-				// Load
-				hModel = modelLoaders[ i ].ModelLoader( localName, mod );
+				// Call matching function to load this type of model
+				hModel = modelLoaders[i].ModelLoader(localName, mod);
 				break;
 			}
 		}
 
 		// A loader was found
-		if( i < numModelLoaders )
+		if (i < numModelLoaders)
 		{
-			if( !hModel )
+			if (!hModel)
 			{
 				// Loader failed, most likely because the file isn't there;
 				// try again without the extension
 				orgNameFailed = qtrue;
 				orgLoader = i;
-				COM_StripExtension( name, localName, MAX_QPATH );
+				COM_StripExtension(name, localName, MAX_QPATH);
 			}
 			else
 			{
 				// Something loaded
-				CModelCache->InsertModelHandle( name, hModel );
+				CModelCache->InsertModelHandle(name, hModel);
+
 				return mod->index;
 			}
 		}
@@ -388,26 +398,27 @@ qhandle_t RE_RegisterModel( const char *name ) {
 	for( i = 0; i < numModelLoaders; i++ )
 	{
 		if (i == orgLoader)
+		{
 			continue;
+		}
 
 		Com_sprintf( altName, sizeof (altName), "%s.%s", localName, modelLoaders[ i ].ext );
 
 		// Load
-		hModel = modelLoaders[ i ].ModelLoader( altName, mod );
+		hModel = modelLoaders[i].ModelLoader(altName, mod);
 
-		if( hModel )
+		if (hModel)
 		{
 			if( orgNameFailed )
 			{
-				ri.Printf( PRINT_DEVELOPER, "WARNING: %s not present, using %s instead\n",
-						name, altName );
+				ri.Printf( PRINT_DEVELOPER, "WARNING: %s not present, using %s instead\n", name, altName );
 			}
-
 			break;
 		}
 	}
 
-	CModelCache->InsertModelHandle( name, hModel );
+	CModelCache->InsertModelHandle(name, hModel);
+
 	return hModel;
 }
 
@@ -742,9 +753,9 @@ qhandle_t RE_RegisterServerModel( const char *name ) {
 	char		localName[ MAX_QPATH ];
 	const char	*ext;
 
-	if (!r_noServerGhoul2)
+	if (!r_noGhoul2)
 	{ //keep it from choking when it gets to these checks in the g2 code. Registering all r_ cvars for the server would be a Bad Thing though.
-		r_noServerGhoul2 = ri.Cvar_Get( "r_noserverghoul2", "0", 0);
+		r_noGhoul2 = ri.Cvar_Get( "r_noGhoul2", "0", 0);
 	}
 
 	if ( !name || !name[0] ) {
@@ -1632,12 +1643,30 @@ void R_Modellist_f( void ) {
 	for ( i = 1 ; i < tr.numModels; i++ ) {
 		mod = tr.models[i];
 		lods = 1;
+
+		std::string szModelType;
+		switch (mod->type)
+		{
+			case MOD_BAD:
+				szModelType = "MOD_BAD"; break;
+			case MOD_BRUSH:
+				szModelType = "BRUSH"; break;
+			case MOD_MDXA:
+				szModelType = "MDXA"; break;
+			case MOD_MDXM:
+				szModelType = "MDXM"; break;
+			case MOD_MESH:
+				szModelType = "MESH"; break;
+			default:
+				szModelType = "UNKNOWN"; break;
+		}
+
 		for ( j = 1 ; j < MD3_MAX_LODS ; j++ ) {
 			if ( mod->data.mdv[j] && mod->data.mdv[j] != mod->data.mdv[j-1] ) {
 				lods++;
 			}
 		}
-		ri.Printf( PRINT_ALL, "%8i : (%i) %s\n",mod->dataSize, lods, mod->name );
+		ri.Printf( PRINT_ALL, "Size = %8i | Lods = %i | Name =  %s (type: %s)\n",mod->dataSize, lods, mod->name, szModelType.c_str());
 		total += mod->dataSize;
 	}
 	ri.Printf( PRINT_ALL, "%8i : Total models\n", total );
@@ -1842,3 +1871,4 @@ void R_ModelBounds( qhandle_t handle, vec3_t mins, vec3_t maxs ) {
 	VectorClear( mins );
 	VectorClear( maxs );
 }
+

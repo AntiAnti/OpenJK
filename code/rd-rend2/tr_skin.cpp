@@ -145,13 +145,18 @@ qhandle_t RE_RegisterIndividualSkin( const char *name , qhandle_t hSkin)
 
 		Q_strncpyz( surf->name, surfName, sizeof( surf->name ) );
 
+		/*
 		if (gServerSkinHack)	surf->shader = R_FindServerShader( token, lightmapsNone, stylesDefault, qtrue );
 		else					surf->shader = R_FindShader( token, lightmapsNone, stylesDefault, qtrue );
+		*/
+
+		Com_Printf("R_FindShader for skin: %s for surface %s \n", token, surfName);
+		surf->shader = R_FindShader(token, lightmapsNone, stylesDefault, qtrue);
+
 		skin->numSurfaces++;
 	}
 
 	ri.FS_FreeFile( text );
-
 
 	// never let a skin have 0 shaders
 	if ( skin->numSurfaces == 0 ) {
@@ -192,7 +197,7 @@ qhandle_t RE_RegisterSkin( const char *name ) {
 		return 0;
 	}
 	tr.numSkins++;
-	skin = (struct skin_s *)R_Hunk_Alloc( sizeof( skin_t ), h_low );
+	skin = (skin_s *)R_Hunk_Alloc( sizeof( skin_t ), h_low );
 	tr.skins[hSkin] = skin;
 	Q_strncpyz( skin->name, name, sizeof( skin->name ) );
 	skin->numSurfaces = 0;
@@ -332,7 +337,7 @@ static char *CommaParse( char **data_p ) {
 	if (len == MAX_TOKEN_CHARS)
 	{
 //		Com_Printf ("Token exceeded %i chars, discarded.\n", MAX_TOKEN_CHARS);
-		len = 0;
+		len = MAX_TOKEN_CHARS - 1;
 	}
 	com_token[len] = 0;
 

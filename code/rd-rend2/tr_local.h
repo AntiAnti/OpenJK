@@ -259,7 +259,7 @@ Ghoul2 Insert Start
 extern cvar_t	*r_noPrecacheGLA;
 #endif
 
-extern cvar_t	*r_noServerGhoul2;
+extern cvar_t	*r_noGhoul2;
 extern cvar_t	*r_Ghoul2AnimSmooth;
 extern cvar_t	*r_Ghoul2UnSqashAfterSmooth;
 //extern cvar_t	*r_Ghoul2UnSqash;
@@ -3001,7 +3001,7 @@ extern const byte stylesDefault[MAXLIGHTMAPS];
 shader_t	*R_FindShader( const char *name, const int *lightmapIndexes, const byte *styles, qboolean mipRawImage );
 shader_t	*R_GetShaderByHandle( qhandle_t hShader );
 shader_t *R_FindShaderByName( const char *name );
-void		R_InitShaders( qboolean server );
+void		R_InitShaders( void );
 void		R_ShaderList_f( void );
 void    R_RemapShader(const char *oldShader, const char *newShader, const char *timeOffset);
 shader_t *R_CreateShaderFromTextureBundle(
@@ -3060,10 +3060,10 @@ struct shaderCommands_s
 	float		shaderTime;
 	int			fogNum;
 	int         cubemapIndex;
-#ifdef REND2_SP_MAYBE
+
 	bool		scale;		// uses texCoords[input->firstIndex] for storage
 	bool		fade;		// uses svars.colors[input->firstIndex] for storage
-#endif
+
 	int			dlightBits;	// or together of all vertexDlightBits
 	int         pshadowBits;
 
@@ -3388,7 +3388,8 @@ public:
 
 #ifdef _G2_GORE
 	// alternate texture coordinates
-	srfG2GoreSurface_t *alternateTex;
+	srfG2GoreSurface_t* alternateTex;
+	float* alternateTexLegacy;
 	void *goreChain;
 
 	float scale;
@@ -3406,6 +3407,7 @@ public:
 		surfaceData = src.surfaceData;
 #ifdef _G2_GORE
 		alternateTex = src.alternateTex;
+		alternateTexLegacy = src.alternateTexLegacy;
 		goreChain = src.goreChain;
 #endif
 		vboMesh = src.vboMesh;
@@ -3420,6 +3422,7 @@ public:
 		, surfaceData(nullptr)
 #ifdef _G2_GORE
 		, alternateTex(nullptr)
+		, alternateTexLegacy(nullptr)
 		, goreChain(nullptr)
 		, scale(1.0f)
 		, fade(0.0f)
@@ -3435,6 +3438,7 @@ public:
 		surfaceData = nullptr;
 #ifdef _G2_GORE
 		alternateTex = nullptr;
+		alternateTexLegacy = nullptr;
 		goreChain = nullptr;
 #endif
 		vboMesh = nullptr;

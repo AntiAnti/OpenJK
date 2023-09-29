@@ -3667,7 +3667,7 @@ static void SortNewShader( void ) {
 
 	// Arnout: fix rendercommandlist
 	// https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=493
-	FixRenderCommandList( i+1 );
+	//FixRenderCommandList( i+1 );
 
 	newShader->sortedIndex = i+1;
 	tr.sortedShaders[i+1] = newShader;
@@ -4416,17 +4416,17 @@ shader_t *R_FindShader( const char *name, const int *lightmapIndexes, const byte
 	Com_Memcpy (shader.lightmapIndex, lightmapIndexes, sizeof (shader.lightmapIndex));
 	Com_Memcpy (shader.styles, styles, sizeof (shader.styles));
 	switch (lightmapIndexes[0]) {
-	case LIGHTMAP_2D:
-	case LIGHTMAP_WHITEIMAGE:
-	{
-		shader.isHDRLit = qfalse;
-		break;
-	}
-	default:
-	{
-		shader.isHDRLit = tr.hdrLighting;
-		break;
-	}
+		case LIGHTMAP_2D:
+		case LIGHTMAP_WHITEIMAGE:
+		{
+			shader.isHDRLit = qfalse;
+			break;
+		}
+		default:
+		{
+			shader.isHDRLit = tr.hdrLighting;
+			break;
+		}
 	}
 
 	//
@@ -5134,17 +5134,14 @@ static void CreateExternalShaders( void ) {
 R_InitShaders
 ==================
 */
-void R_InitShaders( qboolean server ) {
+void R_InitShaders( void ) {
 	ri.Printf( PRINT_ALL, "Initializing Shaders\n" );
 
 	Com_Memset(hashTable, 0, sizeof(hashTable));
 
-	if ( !server )
-	{
-		CreateInternalShaders();
+	CreateInternalShaders();
 
-		ScanAndLoadShaderFiles();
+	ScanAndLoadShaderFiles();
 
-		CreateExternalShaders();
-	}
+	CreateExternalShaders();
 }
