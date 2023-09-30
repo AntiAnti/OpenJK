@@ -1796,6 +1796,7 @@ void G2_SaveGhoul2Models(CGhoul2Info_v& ghoul2)
 		return;
 	}
 
+
 	// save out how many ghoul2 models we have
 	const int model_count = static_cast<int>(ghoul2.size());
 
@@ -1808,13 +1809,13 @@ void G2_SaveGhoul2Models(CGhoul2Info_v& ghoul2)
 
 		// save out how many surfaces we have
 		const int surface_count = static_cast<int>(ghoul2[i].mSlist.size());
-
 		saved_game.write<int32_t>(surface_count);
 
 		// now save the all the surface list info
 		for (int x = 0; x < surface_count; ++x)
 		{
-			ghoul2[i].mSlist[x].sg_export(saved_game);
+			ghoul2[i].mSlist[x].sg_export(
+				saved_game);
 		}
 
 		// save out how many bones we have
@@ -1829,7 +1830,6 @@ void G2_SaveGhoul2Models(CGhoul2Info_v& ghoul2)
 
 		// save out how many bolts we have
 		const int bolt_count = static_cast<int>(ghoul2[i].mBltlist.size());
-
 		saved_game.write<int32_t>(bolt_count);
 
 		// lastly save the all the bolt list info
@@ -1848,7 +1848,9 @@ void G2_FreeSaveBuffer(char *buffer)
 	R_Free(buffer);
 }
 
-void G2_LoadGhoul2Model(CGhoul2Info_v &ghoul2, char *buffer)
+void G2_LoadGhoul2Model(
+	CGhoul2Info_v& ghoul2,
+	char* buffer)
 {
 	static_cast<void>(buffer);
 
@@ -1857,7 +1859,6 @@ void G2_LoadGhoul2Model(CGhoul2Info_v &ghoul2, char *buffer)
 	// first thing, lets see how many ghoul2 models we have, and resize our buffers accordingly
 	int model_count = 0;
 	saved_game.read<int32_t>(model_count);
-
 	ghoul2.resize(model_count);
 
 	// did we actually resize to a value?
@@ -1887,6 +1888,7 @@ void G2_LoadGhoul2Model(CGhoul2Info_v &ghoul2, char *buffer)
 
 		// give us enough surfaces to load up the data
 		int surface_count = 0;
+
 		saved_game.read<int32_t>(surface_count);
 		ghoul2[i].mSlist.resize(surface_count);
 
@@ -1898,7 +1900,9 @@ void G2_LoadGhoul2Model(CGhoul2Info_v &ghoul2, char *buffer)
 
 		// give us enough bones to load up the data
 		int bone_count = 0;
+
 		saved_game.read<int32_t>(bone_count);
+
 		ghoul2[i].mBlist.resize(bone_count);
 
 		// now load all the bones
@@ -1909,7 +1913,9 @@ void G2_LoadGhoul2Model(CGhoul2Info_v &ghoul2, char *buffer)
 
 		// give us enough bolts to load up the data
 		int bolt_count = 0;
+
 		saved_game.read<int32_t>(bolt_count);
+
 		ghoul2[i].mBltlist.resize(bolt_count);
 
 		// now load all the bolts

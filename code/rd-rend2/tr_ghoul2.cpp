@@ -4221,7 +4221,13 @@ qboolean R_LoadMDXM(model_t *mod, void *buffer, const char *mod_name, qboolean &
 		// get the shader name
 		sh = R_FindShader(surfInfo->shader, lightmapsNone, stylesDefault, qtrue);
 		// insert it in the surface list
-		if ( sh->defaultShader ) 
+
+		if (!sh)
+		{
+			i = i;
+		}
+
+		if (sh->defaultShader )
 		{
 			surfInfo->shaderIndex = 0;
 		}
@@ -4835,8 +4841,7 @@ qboolean R_LoadMDXA(model_t *mod, void *buffer, const char *mod_name, qboolean &
 	size += (childNumber * (CHILD_PADDING * 8)); 
 #endif // CREATE_LIMB_HIERARCHY
 
-	mdxa = (mdxaHeader_t *)CModelCache->Allocate(
-		size, buffer, mod_name, &bAlreadyFound, TAG_MODEL_GLA);
+	mdxa = (mdxaHeader_t *)CModelCache->Allocate(size, buffer, mod_name, &bAlreadyFound, TAG_MODEL_GLA);
 	mod->data.gla = mdxa;
 
 	// I should probably eliminate 'bAlreadyFound', but wtf?

@@ -283,6 +283,12 @@ cvar_t* r_ext_compressed_lightmaps;
 
 #define ri_Cvar_Get_NoComm(varname, value, flag, comment) ri.Cvar_Get(varname, value, flag)
 
+#ifndef JKA_MP
+
+static qboolean gbAllowScreenDissolve = qtrue;
+
+#endif // !JKA_MP
+
 // STUBS, REPLACEME
 void stub_RE_GetBModelVerts(int bModel, vec3_t* vec, float* normal) {}
 void stub_RE_WorldEffectCommand(const char* cmd) {}
@@ -2079,6 +2085,33 @@ void R_Init( void ) {
 
 /*
 ===============
+R_SVModelInit
+===============
+*/
+void R_SVModelInit()
+{
+	//tr.numModels = 0;
+	//tr.numShaders = 0;
+	//tr.numSkins = 0;
+
+	//R_InitImages();
+	//R_InitShaders();
+
+	tr.numShaders = 0;
+	tr.numImages = 0;
+
+	R_InitImagesPool();
+	R_InitImages();
+	R_InitGPUBuffers();
+	FBO_Init();
+	GLSL_LoadGPUShaders();
+	R_InitShaders();
+
+	R_ModelInit();
+}
+
+/*
+===============
 RE_Shutdown
 ===============
 */
@@ -2218,11 +2251,25 @@ int C_GetLevel( void )
 
 void C_LevelLoadEnd( void )
 {
-	CModelCache->LevelLoadEnd( qfalse );
-	ri.SND_RegisterAudio_LevelLoadEnd( qfalse );
+#ifdef JKA_MP
+	CModelCache->LevelLoadEnd(qfalse);
+	ri.SND_RegisterAudio_LevelLoadEnd(qfalse);
+	ri.S_RestartMusic();
+#else
+	CModelCache->LevelLoadEnd(qfalse);
+	//RE_RegisterImages_LevelLoadEnd();
+	ri.SND_RegisterAudio_LevelLoadEnd(qfalse);
+
+	if (gbAllowScreenDissolve)
+	{
+		// TODO: Implement InitDissolve
+		//RE_InitDissolve(qfalse);
+	}
+
 	ri.S_RestartMusic();
 
 	*(ri.gbAlreadyDoingLoad()) = qfalse;
+#endif // JKA_MP
 }
 
 /*

@@ -293,7 +293,8 @@ optimization to prevent disk rescanning if they are
 asked for again.
 ====================
 */
-qhandle_t RE_RegisterModel(const char *name) {
+qhandle_t RE_RegisterModel(const char *name)
+{
 	model_t		*mod;
 	qhandle_t	hModel;
 	qboolean	orgNameFailed = qfalse;
@@ -1594,11 +1595,6 @@ void RE_BeginRegistration( glconfig_t *glconfigOut ) {
 }
 
 //=============================================================================
-
-void R_SVModelInit()
-{
-	R_ModelInit();
-}
 
 /*
 ===============

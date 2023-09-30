@@ -2373,7 +2373,7 @@ qboolean G2_TestModelPointers(CGhoul2Info *ghlInfo) // returns true if the model
 				}
 
 				ghlInfo->currentModelSize = mdxm->ofsEnd;
-				ghlInfo->animModel = R_GetModelByHandle(mdxm->animIndex);
+				ghlInfo->animModel = R_GetModelByHandle(mdxm->animIndex + ghlInfo->animModelIndexOffset);
 
 				if (ghlInfo->animModel)
 				{
@@ -2455,7 +2455,7 @@ qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the mode
 				ghlInfo->currentModelSize=mdxm->ofsEnd;
 				G2ERROR(ghlInfo->currentModelSize, va("Zero sized Model? (glm) %s",ghlInfo->mFileName));
 
-				ghlInfo->animModel = R_GetModelByHandle(mdxm->animIndex);
+				ghlInfo->animModel = R_GetModelByHandle(mdxm->animIndex + ghlInfo->animModelIndexOffset);
 				G2ERROR(ghlInfo->animModel, va("NULL Model (gla) %s",ghlInfo->mFileName));
 
 				if (ghlInfo->animModel)
