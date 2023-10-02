@@ -24,16 +24,14 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include <limits.h>
 #include <string>
-#include "qcommon/sstring.h"	// stl string class won't compile in here (MS shite), so use Gil's.
-#include "qcommon/q_shared.h"
-#include "qcommon/qcommon.h"
+#include "../qcommon/sstring.h"	// stl string class won't compile in here (MS shite), so use Gil's.
 #include "tr_local.h"
 #include "tr_font.h"
 
-#include "qcommon/stringed_ingame.h"
+#include "../qcommon/stringed_ingame.h"
 
 #ifdef JK2_MODE
-#include "qcommon/strippublic.h"
+#include "../qcommon/strippublic.h"
 #endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////

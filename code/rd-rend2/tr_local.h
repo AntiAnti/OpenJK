@@ -41,7 +41,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <unordered_map>
 #include <string>
 
-#define GL_INDEX_TYPE		GL_UNSIGNED_INT
+#define GL_INDEX_TYPE			GL_UNSIGNED_INT
 typedef unsigned int glIndex_t;
 
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))
@@ -49,22 +49,33 @@ typedef unsigned int glIndex_t;
 // 14 bits
 // can't be increased without changing bit packing for drawsurfs
 // see QSORT_SHADERNUM_SHIFT
-#define SHADERNUM_BITS	14
-#define MAX_SHADERS		(1<<SHADERNUM_BITS)
+#define SHADERNUM_BITS			14
+#define MAX_SHADERS				(1<<SHADERNUM_BITS)
 
-#define	MAX_FBOS      256
-#define MAX_VISCOUNTS 5
-#define MAX_VBOS      4096
-#define MAX_IBOS      4096
-#define MAX_G2_BONES  72
+#define	MAX_FBOS				256
+#define MAX_VISCOUNTS			5
+#define MAX_VBOS				4096
+#define MAX_IBOS				4096
+#define MAX_G2_BONES			72
 
-#define MAX_CALC_PSHADOWS    64
-#define MAX_DRAWN_PSHADOWS    32 // do not increase past 32, because bit flags are used on surfaces
-#define PSHADOW_MAP_SIZE      1024
-#define DSHADOW_MAP_SIZE      512
-#define CUBE_MAP_MIPS      8
+#define MAX_CALC_PSHADOWS		64
+#define MAX_DRAWN_PSHADOWS		32 // do not increase past 32, because bit flags are used on surfaces
+#define PSHADOW_MAP_SIZE		1024
+#define DSHADOW_MAP_SIZE		512
+#define CUBE_MAP_MIPS			8
 #define CUBE_MAP_ROUGHNESS_MIPS CUBE_MAP_MIPS - 2
-#define CUBE_MAP_SIZE      (1 << CUBE_MAP_MIPS)
+#define CUBE_MAP_SIZE			(1 << CUBE_MAP_MIPS)
+
+//for transform optimization -rww
+#define GHOUL2_ZONETRANSALLOC	0x2000
+
+#define	GHOUL2_CRAZY_SMOOTH		0x2000		// hack for smoothing during ugly situations. forgive me.
+#define	BONE_NEED_TRANSFORM		0x8000
+#define RDF_AUTOMAP				32			// means this scene is to draw the automap -rww
+#define RF_FORCEPOST			0x200000	// force it to post-render -rww
+#define	RF_MINLIGHT				0x00001		// allways have some light (viewmodel, some items)
+#define RF_ALPHA_DEPTH			0x100000	// depth write on alpha model
+#define	RDF_NOFOG				64			// no global fog in this scene (but still brush fog) -rww
 
 /*
 =====================================================
@@ -3721,6 +3732,15 @@ typedef struct backEndData_s {
 	pshadow_t pshadows[MAX_CALC_PSHADOWS];
 	renderCommandList_t	commands;
 } backEndData_t;
+
+typedef enum {
+	h_high,
+	h_low,
+	h_dontcare
+} ha_pref;
+
+void* Hunk_Alloc(int size, ha_pref preference);
+
 
 extern	int		max_polys;
 extern	int		max_polyverts;

@@ -24,8 +24,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #ifndef __QFILES_H__
 #define __QFILES_H__
 
-#include "../qcommon/q_shared.h"
-
 //
 // qfiles.h: quake file formats
 // This file must be identical in the quake and utils directories

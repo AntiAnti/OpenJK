@@ -1665,23 +1665,23 @@ void R_Register( void )
 	Ghoul2 Insert Start
 	*/
 #ifdef _DEBUG
-	r_noPrecacheGLA						= ri_Cvar_Get_NoComm( "r_noPrecacheGLA",				"0",						CVAR_CHEAT, "" );
+	r_noPrecacheGLA						= ri_Cvar_Get_NoComm( "r_noPrecacheGLA",				"0",					CVAR_CHEAT, "" );
 #endif
-	r_noGhoul2							= ri_Cvar_Get_NoComm( "r_noghoul2",				"0",						CVAR_CHEAT, "" );
+	r_noGhoul2							= ri_Cvar_Get_NoComm( "r_noghoul2",				"0",							CVAR_CHEAT, "" );
 	r_Ghoul2AnimSmooth					= ri_Cvar_Get_NoComm( "r_ghoul2animsmooth",			"0.3",						CVAR_NONE, "" );
 	r_Ghoul2UnSqashAfterSmooth			= ri_Cvar_Get_NoComm( "r_ghoul2unsqashaftersmooth",	"1",						CVAR_NONE, "" );
 	broadsword							= ri_Cvar_Get_NoComm( "broadsword",					"0",						CVAR_ARCHIVE, "" );
-	broadsword_kickbones				= ri_Cvar_Get_NoComm( "broadsword_kickbones",			"1",						CVAR_NONE, "" );
-	broadsword_kickorigin				= ri_Cvar_Get_NoComm( "broadsword_kickorigin",			"1",						CVAR_NONE, "" );
-	broadsword_dontstopanim				= ri_Cvar_Get_NoComm( "broadsword_dontstopanim",		"0",						CVAR_NONE, "" );
+	broadsword_kickbones				= ri_Cvar_Get_NoComm( "broadsword_kickbones",			"1",					CVAR_NONE, "" );
+	broadsword_kickorigin				= ri_Cvar_Get_NoComm( "broadsword_kickorigin",			"1",					CVAR_NONE, "" );
+	broadsword_dontstopanim				= ri_Cvar_Get_NoComm( "broadsword_dontstopanim",		"0",					CVAR_NONE, "" );
 	broadsword_waitforshot				= ri_Cvar_Get_NoComm( "broadsword_waitforshot",		"0",						CVAR_NONE, "" );
-	broadsword_playflop					= ri_Cvar_Get_NoComm( "broadsword_playflop",			"1",						CVAR_NONE, "" );
-	broadsword_smallbbox				= ri_Cvar_Get_NoComm( "broadsword_smallbbox",			"0",						CVAR_NONE, "" );
-	broadsword_extra1					= ri_Cvar_Get_NoComm( "broadsword_extra1",				"0",						CVAR_NONE, "" );
-	broadsword_extra2					= ri_Cvar_Get_NoComm( "broadsword_extra2",				"0",						CVAR_NONE, "" );
+	broadsword_playflop					= ri_Cvar_Get_NoComm( "broadsword_playflop",			"1",					CVAR_NONE, "" );
+	broadsword_smallbbox				= ri_Cvar_Get_NoComm( "broadsword_smallbbox",			"0",					CVAR_NONE, "" );
+	broadsword_extra1					= ri_Cvar_Get_NoComm( "broadsword_extra1",				"0",					CVAR_NONE, "" );
+	broadsword_extra2					= ri_Cvar_Get_NoComm( "broadsword_extra2",				"0",					CVAR_NONE, "" );
 	broadsword_effcorr					= ri_Cvar_Get_NoComm( "broadsword_effcorr",			"1",						CVAR_NONE, "" );
-	broadsword_ragtobase				= ri_Cvar_Get_NoComm( "broadsword_ragtobase",			"2",						CVAR_NONE, "" );
-	broadsword_dircap					= ri_Cvar_Get_NoComm( "broadsword_dircap",				"64",						CVAR_NONE, "" );
+	broadsword_ragtobase				= ri_Cvar_Get_NoComm( "broadsword_ragtobase",			"2",					CVAR_NONE, "" );
+	broadsword_dircap					= ri_Cvar_Get_NoComm( "broadsword_dircap",				"64",					CVAR_NONE, "" );
 	/*
 	Ghoul2 Insert End
 	*/

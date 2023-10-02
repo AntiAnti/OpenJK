@@ -371,7 +371,6 @@ struct boltInfo_t{
 	int			surfaceNumber;	// surface number bolt attaches to
 	int			surfaceType;	// if we attach to a surface, this tells us if it is an original surface or a generated one - doesn't go across the network
 	int			boltUsed;		// nor does this
-	mdxaBone_t	position;		// this does not go across the network
 	boltInfo_t():
 	boneNumber(-1),
 	surfaceNumber(-1),
@@ -413,8 +412,6 @@ typedef std::vector <mdxaBone_t> mdxaBone_v;
 #define		GHOUL2_NOMODEL	 0x004
 #define		GHOUL2_NEWORIGIN 0x008
 
-//for transform optimization -rww
-#define		GHOUL2_ZONETRANSALLOC	0x2000
 
 // NOTE order in here matters. We save out from mModelindex to mFlags, but not the STL vectors that are at the top or the bottom.
 class CBoneCache;

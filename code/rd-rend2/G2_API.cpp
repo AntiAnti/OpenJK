@@ -1103,7 +1103,7 @@ qboolean G2API_SetBoneAnim(CGhoul2Info* ghlInfo, const char* boneName, const int
 		float a_setFrame = ((setFrame < 0.f && setFrame != -1.f) || setFrame > 100000) ? 0.f : setFrame;
 
 		qboolean setPtrs = qfalse;
-		qboolean res = qfalse;
+		bool res = false;
 		
 		//rww - RAGDOLL_BEGIN
 		if (ghlInfo)
@@ -1326,7 +1326,7 @@ qboolean G2API_SetBoneAnglesIndex(
 	qhandle_t *modelList, int blendTime, int currentTime)
 {
 	qboolean setPtrs = qfalse;
-	qboolean res = qfalse;
+	bool res = false;
 
 	if (ghlInfo)
 	{
@@ -2414,7 +2414,7 @@ extern timing_c G2PerformanceTimer_G2_SetupModelPointers;
 extern int G2Time_G2_SetupModelPointers;
 #endif
 
-qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the model is properly set up
+bool G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the model is properly set up
 {
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2PerformanceTimer_G2_SetupModelPointers.Start();
@@ -2422,7 +2422,7 @@ qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the mode
 	G2ERROR(ghlInfo,"G2_SetupModelPointers: NULL ghlInfo");
 	if (!ghlInfo)
 	{
-		return qfalse;
+		return false;
 	}
 
 	ghlInfo->mValid=false;
@@ -2493,19 +2493,19 @@ qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the mode
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2Time_G2_SetupModelPointers += G2PerformanceTimer_G2_SetupModelPointers.End();
 #endif
-	return (qboolean)ghlInfo->mValid;
+	return ghlInfo->mValid;
 }
 
-qboolean G2_SetupModelPointers(CGhoul2Info_v &ghoul2) // returns true if any model is properly set up
+bool G2_SetupModelPointers(CGhoul2Info_v &ghoul2) // returns true if any model is properly set up
 {
 	bool ret = false;
 
 	for (int i=0; i<ghoul2.size(); i++)
 	{
-		qboolean r = G2_SetupModelPointers(&ghoul2[i]);
+		bool r = G2_SetupModelPointers(&ghoul2[i]);
 		ret = ret || r;
 	}
-	return (qboolean)ret;
+	return ret;
 }
 
 qboolean G2API_IsGhoul2InfovValid (CGhoul2Info_v& ghoul2)

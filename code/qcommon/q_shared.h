@@ -284,13 +284,6 @@ typedef enum {
 #define UI_INVERSE		0x00002000
 #define UI_PULSE		0x00004000
 
-typedef enum {
-	h_high,
-	h_low,
-	h_dontcare
-} ha_pref;
-
-void *Hunk_Alloc( int size, ha_pref preference );
 
 #define Com_Memset memset
 #define Com_Memcpy memcpy
@@ -347,8 +340,8 @@ qboolean COM_CompareExtension(const char *in, const char *ext);
 void	COM_DefaultExtension( char *path, int maxSize, const char *extension );
 
 //JLFCALLOUT include MPNOTUSED
-void	COM_BeginParseSession( void );
-void	COM_EndParseSession( void );
+void	 COM_BeginParseSession( void );
+void	 COM_EndParseSession( void );
 
 // For compatibility with shared code
 QINLINE void COM_BeginParseSession( const char *sessionName )

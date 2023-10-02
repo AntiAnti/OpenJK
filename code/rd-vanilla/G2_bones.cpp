@@ -472,11 +472,11 @@ qboolean G2_Set_Bone_Angles_Index(CGhoul2Info *ghlInfo, boneInfo_v &blist, const
 }
 
 // Given a model handle, and a bone name, we want to set angles specifically for overriding
-qboolean G2_Set_Bone_Angles(CGhoul2Info* ghlInfo, boneInfo_v& blist, const char* boneName, const float* angles,
+qboolean G2_Set_Bone_Angles(CGhoul2Info *ghlInfo, boneInfo_v &blist, const char *boneName, const float *angles,
 							const int flags, const Eorientations up, const Eorientations left, const Eorientations forward,
 							const int blendTime, const int currentTime)
 {
-	int index = G2_Find_Bone(ghlInfo, blist, boneName);
+	int			index = G2_Find_Bone(ghlInfo, blist, boneName);
 	if (index == -1)
 	{
 		index = G2_Add_Bone(ghlInfo->animModel, blist, boneName);

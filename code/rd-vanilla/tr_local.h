@@ -27,7 +27,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../qcommon/q_shared.h"
 #include "../qcommon/qfiles.h"
 #include "tr_common.h"
-#include "rd-common/tr_types.h"
 #include "tr_public.h"
 #include "mdx_format.h"
 #include "qgl.h"
@@ -517,6 +516,7 @@ typedef struct skin_s {
 	int			numSurfaces;
 	skinSurface_t	*surfaces[128];
 } skin_t;
+
 
 typedef struct {
 	int			originalBrushNumber;
@@ -1800,7 +1800,6 @@ typedef struct {
 
 extern	backEndData_t	*backEndData;
 
-void *R_GetCommandBuffer( int bytes );
 void RB_ExecuteRenderCommands( const void *data );
 
 void R_IssuePendingRenderCommands( void );

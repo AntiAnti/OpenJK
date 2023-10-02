@@ -860,7 +860,7 @@ static qboolean R_LoadMD3(model_t * mod, int lod, void *buffer, const char *modN
 	int             version;
 	int             size;
 
-	md3Model = (md3Header_t *) buffer;
+	md3Model = (md3Header_t*)buffer;
 
 	version = LittleLong(md3Model->version);
 	if(version != MD3_VERSION)

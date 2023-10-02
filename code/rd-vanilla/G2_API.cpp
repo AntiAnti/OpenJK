@@ -645,7 +645,7 @@ public:
 		assert(handle>0); //null handle
 		assert((handle&G2_INDEX_MASK)>=0&&(handle&G2_INDEX_MASK)<MAX_G2_MODELS); //junk handle
 		assert(mIds[handle&G2_INDEX_MASK]==handle); // not a valid handle, could be old or garbage
-		assert(!(handle<=0||(handle&G2_INDEX_MASK)<0||(handle&G2_INDEX_MASK)>=MAX_G2_MODELS||mIds[handle&G2_INDEX_MASK]!=handle));
+		assert (!(handle<=0||(handle&G2_INDEX_MASK)<0||(handle&G2_INDEX_MASK)>=MAX_G2_MODELS||mIds[handle&G2_INDEX_MASK]!=handle));
 
 		return mInfos[handle&G2_INDEX_MASK];
 	}
@@ -2265,12 +2265,12 @@ bool G2_TestModelPointers(CGhoul2Info *ghlInfo) // returns true if the model is 
 	return ghlInfo->mValid;
 }
 
-qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the model is properly set up
+bool G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the model is properly set up
 {
 	G2ERROR(ghlInfo,"NULL ghlInfo");
 	if (!ghlInfo)
 	{
-		return qfalse;
+		return false;
 	}
 	ghlInfo->mValid=false;
 //	G2WARNING(ghlInfo->mModelindex != -1,"Setup request on non-used info slot?");
@@ -2327,10 +2327,10 @@ qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the mode
 		ghlInfo->currentAnimModelSize=0;
 		ghlInfo->aHeader=0;
 	}
-	return ghlInfo->mValid ? qtrue : qfalse;
+	return ghlInfo->mValid;
 }
 
-qboolean G2_SetupModelPointers(CGhoul2Info_v &ghoul2) // returns true if any model is properly set up
+bool G2_SetupModelPointers(CGhoul2Info_v &ghoul2) // returns true if any model is properly set up
 {
 	bool ret=false;
 	int i;
@@ -2339,7 +2339,7 @@ qboolean G2_SetupModelPointers(CGhoul2Info_v &ghoul2) // returns true if any mod
 		bool r=G2_SetupModelPointers(&ghoul2[i]);
 		ret=ret||r;
 	}
-	return ret ? qtrue : qfalse;
+	return ret;
 }
 
 
