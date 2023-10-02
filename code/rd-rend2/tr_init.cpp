@@ -290,16 +290,15 @@ static qboolean gbAllowScreenDissolve = qtrue;
 #endif // !JKA_MP
 
 // STUBS, REPLACEME
-void stub_RE_GetBModelVerts(int bModel, vec3_t* vec, float* normal) {}
-void stub_RE_WorldEffectCommand(const char* cmd) {}
+void RE_WorldEffectCommand(const char* cmd);
 qboolean stub_RE_ProcessDissolve(void) { return qfalse; }
 qboolean stub_RE_InitDissolve(qboolean bForceCircularExtroWipe) { return qfalse; }
-bool stub_R_IsShaking(vec3_t pos) { return qfalse; }
+bool stub_R_IsShaking(vec3_t pos) { return false; }
 void stub_R_InitWorldEffects(void) {}
-bool stub_R_GetWindVector(vec3_t windVector, vec3_t atpoint) { return qfalse; }
-bool stub_R_GetWindGusting(vec3_t atpoint) { return qfalse; }
-bool stub_R_IsOutside(vec3_t pos) { return qfalse; }
-float stub_R_IsOutsideCausingPain(vec3_t pos) { return qfalse; }
+bool stub_R_GetWindVector(vec3_t windVector, vec3_t atpoint) { return false; }
+bool stub_R_GetWindGusting(vec3_t atpoint) { return false; }
+bool stub_R_IsOutside(vec3_t pos) { return false; }
+float stub_R_IsOutsideCausingPain(vec3_t pos) { return 0.f; }
 float stub_R_GetChanceOfSaberFizz() { return qfalse; }
 bool stub_R_SetTempGlobalFogColor(vec3_t color) { return qfalse; }
 void stub_RE_GetScreenShot(byte* buffer, int w, int h) {}
@@ -2360,7 +2359,7 @@ Q_EXPORT refexport_t* QDECL GetRefAPI ( int apiVersion, refimport_t *rimp ) {
 	re.GetLightStyle = RE_GetLightStyle;
 	re.SetLightStyle = RE_SetLightStyle;
 	re.GetBModelVerts = RE_GetBModelVerts;
-	re.WorldEffectCommand = stub_RE_WorldEffectCommand;
+	re.WorldEffectCommand = RE_WorldEffectCommand;
 	//re.GetModelBounds = RE_GetModelBounds;
 
 	re.SVModelInit = R_SVModelInit;
