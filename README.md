@@ -105,6 +105,6 @@ Rend2 renderer is developed by [SomaZ](https://github.com/SomaZ/OpenJK/).
 The goal of this project is to enable rend2 in SP game.
 
 Known issues
-- interactive objects (like lever arms) don't move when player interacts (but interaction script works)
-- Some effects which don't exist in MP (such as weather) aren't implemented in rend2
+- interactive objects (like lever arms) don't move when player interacts (doesn't work in MP as well)
+- some effects which don't exist in MP (such as strong wind) aren't implemented in rend2
 - not tested, so stability in general is unknown
