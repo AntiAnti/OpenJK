@@ -150,7 +150,6 @@ qhandle_t RE_RegisterIndividualSkin( const char *name , qhandle_t hSkin)
 		else					surf->shader = R_FindShader( token, lightmapsNone, stylesDefault, qtrue );
 		*/
 
-		Com_Printf("R_FindShader for skin: %s for surface %s \n", token, surfName);
 		surf->shader = R_FindShader(token, lightmapsNone, stylesDefault, qtrue);
 
 		skin->numSurfaces++;

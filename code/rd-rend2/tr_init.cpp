@@ -289,15 +289,17 @@ static qboolean gbAllowScreenDissolve = qtrue;
 
 #endif // !JKA_MP
 
-// STUBS, REPLACEME
+// Weather & environmental fx
 void RE_WorldEffectCommand(const char* cmd);
+bool R_IsOutside(vec3_t pos);
+bool R_IsShaking(vec3_t pos);
+bool R_GetWindVector(vec3_t windVector, vec3_t atPoint); // doesn't work?
+bool R_GetWindGusting(vec3_t atPoint); // doesn't work
+
+// STUBS, REPLACEME
 qboolean stub_RE_ProcessDissolve(void) { return qfalse; }
 qboolean stub_RE_InitDissolve(qboolean bForceCircularExtroWipe) { return qfalse; }
-bool stub_R_IsShaking(vec3_t pos) { return false; }
 void stub_R_InitWorldEffects(void) {}
-bool stub_R_GetWindVector(vec3_t windVector, vec3_t atpoint) { return false; }
-bool stub_R_GetWindGusting(vec3_t atpoint) { return false; }
-bool stub_R_IsOutside(vec3_t pos) { return false; }
 float stub_R_IsOutsideCausingPain(vec3_t pos) { return 0.f; }
 float stub_R_GetChanceOfSaberFizz() { return qfalse; }
 bool stub_R_SetTempGlobalFogColor(vec3_t color) { return qfalse; }
@@ -2383,12 +2385,12 @@ Q_EXPORT refexport_t* QDECL GetRefAPI ( int apiVersion, refimport_t *rimp ) {
 	re.tr_distortionNegate = stub_get_tr_distortionNegate;
 
 	//re.InitializeWireframeAutomap = stub_InitializeWireframeAutomap; // MP
-	re.GetWindVector = stub_R_GetWindVector;
-	re.GetWindGusting = stub_R_GetWindGusting;
-	re.IsOutside = stub_R_IsOutside;
+	re.GetWindVector = R_GetWindVector;
+	re.GetWindGusting = R_GetWindGusting;
+	re.IsOutside = R_IsOutside;
 	re.IsOutsideCausingPain = stub_R_IsOutsideCausingPain;
 	re.GetChanceOfSaberFizz = stub_R_GetChanceOfSaberFizz;
-	re.IsShaking = stub_R_IsShaking;
+	re.IsShaking = R_IsShaking;
 	re.AddWeatherZone = stub_RE_AddWeatherZone;
 	re.SetTempGlobalFogColor = stub_R_SetTempGlobalFogColor;
 
