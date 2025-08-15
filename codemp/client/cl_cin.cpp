@@ -43,12 +43,18 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #ifndef _WIN32
 #include <cmath>
 #endif
+#define _clamp(value, vmin, vmax) (value > vmax ? vmax : (value < vmin ? vmin : value))
+
+// Keep video aspect ratio
+// May be replaced with r_ratioFix cvar
+#define ASPECT_RATIO_FIX	1
+// If qtrue, stretch video height to screen height while keeping aspect ratio
+// If qfalse, stretch video to screen width and add negative vertical offset to keep it at the center
+// qfalse is preferred to hide back bars which already exist in game videos
+#define ASPECT_RATIO_STRETCH_TO_HEIGHT qfalse
 
 #define MAXSIZE				8
 #define MINSIZE				4
-
-#define DEFAULT_CIN_WIDTH	512
-#define DEFAULT_CIN_HEIGHT	512
 
 #define ROQ_QUAD			0x1000
 #define ROQ_QUAD_INFO		0x1001
@@ -59,6 +65,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define ROQ_PACKET			0x1030
 #define ZA_SOUND_MONO		0x1020
 #define ZA_SOUND_STEREO		0x1021
+#define ROQ_VQ_MOT			0x0000
+#define ROQ_VQ_FCC			0x4000
+#define ROQ_VQ_SLD			0x8000
+#define ROQ_VQ_CCC			0xC000
 
 #define MAX_VIDEO_HANDLES	16
 
@@ -78,18 +88,22 @@ static	long				ROQ_UB_tab[256];
 static	long				ROQ_UG_tab[256];
 static	long				ROQ_VG_tab[256];
 static	long				ROQ_VR_tab[256];
-static	unsigned short		vq2[256*16*4];
-static	unsigned short		vq4[256*64*4];
-static	unsigned short		vq8[256*256*4];
+static	unsigned short		vq2[256 * 16 * 4];
+static	unsigned short		vq4[256 * 64 * 4];
+static	unsigned short		vq8[256 * 256 * 4];
 
+#define BASE_ROQ_FRAME_SIZE 65536 // 65536 was enough for 1024x1024, and max supported now is 2048x2048
+#define MAX_ROQ_FRAME_SIZE	(unsigned int)(BASE_ROQ_FRAME_SIZE * 4)
 
-typedef struct cinematics_s {
-	byte				linbuf[DEFAULT_CIN_WIDTH*DEFAULT_CIN_HEIGHT*4*2];
-	byte				file[65536];
+typedef struct {
+	byte*				linbuf = NULL; // allocate dynamically for two frames, depending on CIN_WIDTH and CIN_HEIGHT
+	byte				file[MAX_ROQ_FRAME_SIZE]; // @TODO: allocate dynamically to support resolution higher than 2K
 	short				sqrTable[256];
 
 	int					mcomp[256];
-	byte				*qStatus[2][32768];
+	byte**				qStatus[2] = { NULL, NULL }; // allocate dynamically
+	int					linbufCapacity = 0;
+	int					qStatusCapacity = 0;
 
 	long				oldXOff, oldYOff, oldysize, oldxsize;
 
@@ -120,8 +134,8 @@ typedef struct cin_cache_s {
 	void ( *VQNormal)(byte *status, void *qdata );
 	void ( *VQBuffer)(byte *status, void *qdata );
 
-	long				samplesPerPixel;				// defaults to 2
-	byte*				gray;
+	long				samplesPerPixel = 4;
+	byte* 				gray;
 	unsigned int		xsize, ysize, maxsize, minsize;
 
 	qboolean			half, smootheddouble, inMemory;
@@ -144,6 +158,7 @@ static int				CL_handle = -1;
 extern int				s_soundtime;		// sample PAIRS
 extern int   			s_paintedtime; 		// sample PAIRS
 
+static int				nScreenRatioFixOffset = 0; // Can remove now, since I swtiched to JAEnhanced algorithm and strtch video to screen width
 
 void CIN_CloseAllVideos(void) {
 	int		i;
@@ -153,6 +168,10 @@ void CIN_CloseAllVideos(void) {
 			CIN_StopCinematic(i);
 		}
 	}
+	if (cin.linbuf) { Hunk_FreeTempMemory(cin.linbuf); cin.linbuf = NULL; cin.linbufCapacity = 0; }
+	if (cin.qStatus[0]) { Hunk_FreeTempMemory(cin.qStatus[0]); cin.qStatus[0] = NULL; }
+	if (cin.qStatus[1]) { Hunk_FreeTempMemory(cin.qStatus[1]); cin.qStatus[1] = NULL; }
+	cin.qStatusCapacity = 0;
 }
 
 
@@ -440,7 +459,7 @@ int		spl;
 	celdata = 0;
 	index	= 0;
 
-        spl = cinTable[currentHandle].samplesPerLine;
+	spl = cinTable[currentHandle].samplesPerLine;
 
 	do {
 		if (!newd) {
@@ -455,12 +474,12 @@ int		spl;
 		celdata <<= 2;
 
 		switch (code) {
-			case	0x8000:													// vq code
+			case ROQ_VQ_SLD:												// vq code
 				blit8_32( (byte *)&vq8[(*data)*128], status[index], spl );
 				data++;
 				index += 5;
 				break;
-			case	0xc000:													// drop
+			case ROQ_VQ_CCC:												// drop
 				index++;													// skip 8x8
 				for(i=0;i<4;i++) {
 					if (!newd) {
@@ -474,11 +493,11 @@ int		spl;
 					code = (unsigned short)(celdata&0xc000); celdata <<= 2;
 
 					switch (code) {											// code in top two bits of code
-						case	0x8000:										// 4x4 vq code
+						case ROQ_VQ_SLD:										// 4x4 vq code
 							blit4_32( (byte *)&vq4[(*data)*32], status[index], spl );
 							data++;
 							break;
-						case	0xc000:										// 2x2 vq code
+						case ROQ_VQ_CCC:										// 2x2 vq code
 							blit2_32( (byte *)&vq2[(*data)*8], status[index], spl );
 							data++;
 							blit2_32( (byte *)&vq2[(*data)*8], status[index]+8, spl );
@@ -488,7 +507,7 @@ int		spl;
 							blit2_32( (byte *)&vq2[(*data)*8], status[index]+spl*2+8, spl );
 							data++;
 							break;
-						case	0x4000:										// motion compensation
+						case ROQ_VQ_FCC:										// motion compensation
 							move4_32( status[index] + cin.mcomp[(*data)], status[index], spl );
 							data++;
 							break;
@@ -496,12 +515,12 @@ int		spl;
 					index++;
 				}
 				break;
-			case	0x4000:													// motion compensation
+			case ROQ_VQ_FCC:													// motion compensation
 				move8_32( status[index] + cin.mcomp[(*data)], status[index], spl );
 				data++;
 				index += 5;
 				break;
-			case	0x0000:
+			case ROQ_VQ_MOT:
 				index += 5;
 				break;
 		}
@@ -611,6 +630,7 @@ static unsigned short yuv_to_rgb( long y, long u, long v )
 * Description:
 *
 ******************************************************************************/
+
 static unsigned int yuv_to_rgb24( long y, long u, long v )
 {
 	long r,g,b,YY = (long)(ROQ_YY_tab[(y)]);
@@ -619,18 +639,9 @@ static unsigned int yuv_to_rgb24( long y, long u, long v )
 	g = (YY + ROQ_UG_tab[u] + ROQ_VG_tab[v]) >> 6;
 	b = (YY + ROQ_UB_tab[u]) >> 6;
 
-	if (r<0)
-		r = 0;
-	if (g<0)
-		g = 0;
-	if (b<0)
-		b = 0;
-	if (r > 255)
-		r = 255;
-	if (g > 255)
-		g = 255;
-	if (b > 255)
-		b = 255;
+	r = _clamp(r, 0, 255);
+	g = _clamp(g, 0, 255);
+	b = _clamp(b, 0, 255);
 
 	return LittleLong ((r)|(g<<8)|(b<<16)|(255<<24));
 }
@@ -977,6 +988,16 @@ static void setupQuad( long xOff, long yOff )
 
 	cinTable[currentHandle].onQuad = 0;
 
+	// Reallocate qStatus arrays for arbitrary frame sizes
+	if (numQuadCels > cin.qStatusCapacity || !cin.qStatus[0] || !cin.qStatus[1])
+	{
+		if (cin.qStatus[0]) { Hunk_FreeTempMemory(cin.qStatus[0]); cin.qStatus[0] = NULL; }
+		if (cin.qStatus[1]) { Hunk_FreeTempMemory(cin.qStatus[1]); cin.qStatus[1] = NULL; }
+		cin.qStatus[0] = (byte**)Hunk_AllocateTempMemory(sizeof(byte*) * numQuadCels);
+		cin.qStatus[1] = (byte**)Hunk_AllocateTempMemory(sizeof(byte*) * numQuadCels);
+		cin.qStatusCapacity = numQuadCels;
+	}
+
 	for(y=0;y<(long)cinTable[currentHandle].ysize;y+=16)
 		for(x=0;x<(long)cinTable[currentHandle].xsize;x+=16)
 			recurseQuad( x, y, 16, xOff, yOff );
@@ -988,6 +1009,7 @@ static void setupQuad( long xOff, long yOff )
 		cin.qStatus[1][i] = temp;			  // eoq
 	}
 }
+
 
 /******************************************************************************
 *
@@ -1007,10 +1029,20 @@ static void readQuadInfo( byte *qData )
 	cinTable[currentHandle].minsize  = qData[6]+qData[7]*256;
 
 	cinTable[currentHandle].CIN_HEIGHT = cinTable[currentHandle].ysize;
-	cinTable[currentHandle].CIN_WIDTH  = cinTable[currentHandle].xsize;
+	cinTable[currentHandle].CIN_WIDTH = cinTable[currentHandle].xsize;
 
-	cinTable[currentHandle].samplesPerLine = cinTable[currentHandle].CIN_WIDTH*cinTable[currentHandle].samplesPerPixel;
-	cinTable[currentHandle].screenDelta = cinTable[currentHandle].CIN_HEIGHT*cinTable[currentHandle].samplesPerLine;
+	cinTable[currentHandle].samplesPerLine = cinTable[currentHandle].CIN_WIDTH * cinTable[currentHandle].samplesPerPixel;
+	cinTable[currentHandle].screenDelta = cinTable[currentHandle].CIN_HEIGHT * cinTable[currentHandle].samplesPerLine;
+
+	// Reallocate linbuf to fit arbitrary sizes
+	int twoFramesBufferSize = cinTable[currentHandle].screenDelta * 2; // two frames
+	if (cin.linbufCapacity < twoFramesBufferSize || !cin.linbuf)
+	{
+		if (cin.linbuf) { Hunk_FreeTempMemory(cin.linbuf); cin.linbuf = NULL; cin.linbufCapacity = 0; }
+		cin.linbuf = (byte*)Hunk_AllocateTempMemory(twoFramesBufferSize);
+		cin.linbufCapacity = twoFramesBufferSize;
+	}
+	cinTable[currentHandle].buf = cin.linbuf + cinTable[currentHandle].screenDelta;
 
 	cinTable[currentHandle].half = qfalse;
 	cinTable[currentHandle].smootheddouble = qfalse;
@@ -1021,16 +1053,13 @@ static void readQuadInfo( byte *qData )
 	cinTable[currentHandle].t[0] = cinTable[currentHandle].screenDelta;
 	cinTable[currentHandle].t[1] = -cinTable[currentHandle].screenDelta;
 
-	cinTable[currentHandle].drawX = cinTable[currentHandle].CIN_WIDTH;
-	cinTable[currentHandle].drawY = cinTable[currentHandle].CIN_HEIGHT;
-	// jic the card sucks
-	if ( cls.glconfig.maxTextureSize <= 256) {
-        if (cinTable[currentHandle].drawX>256) {
-            cinTable[currentHandle].drawX = 256;
-        }
-        if (cinTable[currentHandle].drawY>256) {
-            cinTable[currentHandle].drawY = 256;
-        }
+	cinTable[currentHandle].drawX = _clamp(cinTable[currentHandle].CIN_WIDTH, 1, cls.glconfig.maxTextureSize);
+	cinTable[currentHandle].drawY = _clamp(cinTable[currentHandle].CIN_HEIGHT, 1, cls.glconfig.maxTextureSize);
+
+	// This safety check is completely unnecessary for all videocards since voodoo2
+	// Unless you try to feed the game a video with resolution higher than 16K
+	if (cinTable[currentHandle].drawX != cinTable[currentHandle].CIN_WIDTH || cinTable[currentHandle].drawY != cinTable[currentHandle].CIN_HEIGHT)
+	{
 		if (cinTable[currentHandle].CIN_WIDTH != 256 || cinTable[currentHandle].CIN_HEIGHT != 256) {
 			Com_Printf("HACK: approxmimating cinematic for Rage Pro or Voodoo\n");
 		}
@@ -1150,28 +1179,35 @@ static void RoQInterrupt(void)
 // new frame is ready
 //
 redump:
-	switch(cinTable[currentHandle].roq_id)
+	switch (cinTable[currentHandle].roq_id)
 	{
 		case	ROQ_QUAD_VQ:
-			if ((cinTable[currentHandle].numQuads&1)) {
+			if ((cinTable[currentHandle].numQuads & 1)) {
 				cinTable[currentHandle].normalBuffer0 = cinTable[currentHandle].t[1];
-				RoQPrepMcomp( cinTable[currentHandle].roqF0, cinTable[currentHandle].roqF1 );
-				cinTable[currentHandle].VQ1( (byte *)cin.qStatus[1], framedata);
-				cinTable[currentHandle].buf = 	cin.linbuf + cinTable[currentHandle].screenDelta;
-			} else {
+				RoQPrepMcomp(cinTable[currentHandle].roqF0, cinTable[currentHandle].roqF1);
+				if (cin.qStatus[1]) // dirty, but works
+				{
+					cinTable[currentHandle].VQ1((byte*)cin.qStatus[1], framedata);
+				}
+				cinTable[currentHandle].buf = cin.linbuf + cinTable[currentHandle].screenDelta;
+			}
+			else {
 				cinTable[currentHandle].normalBuffer0 = cinTable[currentHandle].t[0];
-				RoQPrepMcomp( cinTable[currentHandle].roqF0, cinTable[currentHandle].roqF1 );
-				cinTable[currentHandle].VQ0( (byte *)cin.qStatus[0], framedata );
-				cinTable[currentHandle].buf = 	cin.linbuf;
+				RoQPrepMcomp(cinTable[currentHandle].roqF0, cinTable[currentHandle].roqF1);
+				if (cin.qStatus[0]) // dirty, but works
+				{
+					cinTable[currentHandle].VQ0((byte*)cin.qStatus[0], framedata);
+				}
+				cinTable[currentHandle].buf = cin.linbuf;
 			}
 			if (cinTable[currentHandle].numQuads == 0) {		// first frame
-				Com_Memcpy(cin.linbuf+cinTable[currentHandle].screenDelta, cin.linbuf, cinTable[currentHandle].samplesPerLine*cinTable[currentHandle].ysize);
+				Com_Memcpy(cin.linbuf + cinTable[currentHandle].screenDelta, cin.linbuf, cinTable[currentHandle].samplesPerLine * cinTable[currentHandle].ysize);
 			}
 			cinTable[currentHandle].numQuads++;
 			cinTable[currentHandle].dirty = qtrue;
 			break;
 		case	ROQ_CODEBOOK:
-			decodeCodeBook( framedata, (unsigned short)cinTable[currentHandle].roq_flags );
+			decodeCodeBook(framedata, (unsigned short)cinTable[currentHandle].roq_flags);
 			break;
 		case	ZA_SOUND_MONO:
 			if (!cinTable[currentHandle].silent) {
@@ -1191,9 +1227,9 @@ redump:
 			break;
 		case	ROQ_QUAD_INFO:
 			if (cinTable[currentHandle].numQuads == -1) {
-				readQuadInfo( framedata );
-				setupQuad( 0, 0 );
-				cinTable[currentHandle].startTime = cinTable[currentHandle].lastTime = Sys_Milliseconds()*com_timescale->value;
+				readQuadInfo(framedata);
+				setupQuad(0, 0);
+				cinTable[currentHandle].startTime = cinTable[currentHandle].lastTime = Sys_Milliseconds() * com_timescale->value;
 			}
 			if (cinTable[currentHandle].numQuads != 1) cinTable[currentHandle].numQuads = 0;
 			break;
@@ -1210,9 +1246,9 @@ redump:
 			cinTable[currentHandle].status = FMV_EOF;
 			break;
 	}
-//
-// read in next frame data
-//
+	//
+	// read in next frame data
+	//
 	if ( cinTable[currentHandle].RoQPlayed >= cinTable[currentHandle].ROQSize ) {
 		if (cinTable[currentHandle].holdAtEnd==qfalse) {
 			if (cinTable[currentHandle].looping) {
@@ -1228,12 +1264,12 @@ redump:
 
 	framedata		 += cinTable[currentHandle].RoQFrameSize;
 	cinTable[currentHandle].roq_id		 = framedata[0] + framedata[1]*256;
-	cinTable[currentHandle].RoQFrameSize = framedata[2] + framedata[3]*256 + framedata[4]*65536;
+	cinTable[currentHandle].RoQFrameSize = framedata[2] + framedata[3]*256 + framedata[4] * 65536;
 	cinTable[currentHandle].roq_flags	 = framedata[6] + framedata[7]*256;
 	cinTable[currentHandle].roqF0		 = (signed char)framedata[7];
 	cinTable[currentHandle].roqF1		 = (signed char)framedata[6];
 
-	if (cinTable[currentHandle].RoQFrameSize>65536||cinTable[currentHandle].roq_id==0x1084) {
+	if (cinTable[currentHandle].RoQFrameSize > MAX_ROQ_FRAME_SIZE || cinTable[currentHandle].roq_id==0x1084) {
 		Com_DPrintf("roq_size>65536||roq_id==0x1084\n");
 		cinTable[currentHandle].status = FMV_EOF;
 		if (cinTable[currentHandle].looping) {
@@ -1247,11 +1283,11 @@ redump:
 		framedata += 8;
 		goto redump;
 	}
-//
-// one more frame hits the dust
-//
-//	assert(cinTable[currentHandle].RoQFrameSize <= 65536);
-//	r = FS_Read( cin.file, cinTable[currentHandle].RoQFrameSize+8, cinTable[currentHandle].iFile );
+	//
+	// one more frame hits the dust
+	//
+	//	assert(cinTable[currentHandle].RoQFrameSize <= 65536);
+	//	r = FS_Read( cin.file, cinTable[currentHandle].RoQFrameSize+8, cinTable[currentHandle].iFile );
 	cinTable[currentHandle].RoQPlayed	+= cinTable[currentHandle].RoQFrameSize+8;
 }
 
@@ -1277,10 +1313,10 @@ static void RoQ_init( void )
 	cinTable[currentHandle].numQuads = -1;
 
 	cinTable[currentHandle].roq_id		= cin.file[ 8] + cin.file[ 9]*256;
-	cinTable[currentHandle].RoQFrameSize	= cin.file[10] + cin.file[11]*256 + cin.file[12]*65536;
+	cinTable[currentHandle].RoQFrameSize	= cin.file[10] + cin.file[11]*256 + cin.file[12] * 65536;
 	cinTable[currentHandle].roq_flags	= cin.file[14] + cin.file[15]*256;
 
-	if (cinTable[currentHandle].RoQFrameSize > 65536 || !cinTable[currentHandle].RoQFrameSize) {
+	if (cinTable[currentHandle].RoQFrameSize > MAX_ROQ_FRAME_SIZE || !cinTable[currentHandle].RoQFrameSize) {
 		return;
 	}
 
@@ -1327,6 +1363,12 @@ static void RoQShutdown( void ) {
 	}
 	cinTable[currentHandle].fileName[0] = 0;
 	currentHandle = -1;
+
+	// Free dynamic cinematic buffers
+	if (cin.linbuf) { Hunk_FreeTempMemory(cin.linbuf); cin.linbuf = NULL; cin.linbufCapacity = 0; }
+	if (cin.qStatus[0]) { Hunk_FreeTempMemory(cin.qStatus[0]); cin.qStatus[0] = NULL; }
+	if (cin.qStatus[1]) { Hunk_FreeTempMemory(cin.qStatus[1]); cin.qStatus[1] = NULL; }
+	cin.qStatusCapacity = 0;
 }
 
 /*
@@ -1477,8 +1519,8 @@ int CIN_PlayCinematic( const char *arg, int x, int y, int w, int h, int systemBi
 	CIN_SetExtents(currentHandle, x, y, w, h);
 	CIN_SetLooping(currentHandle, (qboolean)((systemBits & CIN_loop)!=0));
 
-	cinTable[currentHandle].CIN_HEIGHT = DEFAULT_CIN_HEIGHT;
-	cinTable[currentHandle].CIN_WIDTH  =  DEFAULT_CIN_WIDTH;
+	cinTable[currentHandle].CIN_HEIGHT = 512;
+	cinTable[currentHandle].CIN_WIDTH  =  512;
 	cinTable[currentHandle].holdAtEnd = (qboolean)((systemBits & CIN_hold) != 0);
 	cinTable[currentHandle].alterGameState = (qboolean)((systemBits & CIN_system) != 0);
 	cinTable[currentHandle].playonwalls = 1;
@@ -1554,7 +1596,8 @@ void CIN_ResampleCinematic(int handle, int *buf2) {
 	xm = cinTable[handle].CIN_WIDTH/256;
 	ym = cinTable[handle].CIN_HEIGHT/256;
 	ll = 8;
-	if (cinTable[handle].CIN_WIDTH==512) {
+	// Why? Let's say so.
+	if (cinTable[handle].CIN_WIDTH == 512 || cinTable[handle].CIN_WIDTH == 2048 || cinTable[handle].CIN_WIDTH == 1024) {
 		ll = 9;
 	}
 
@@ -1631,6 +1674,14 @@ void CIN_DrawCinematic (int handle) {
 		Hunk_FreeTempMemory(buf2);
 		return;
 	}
+	
+	// Used to fix aspect ratio by fitting video to screen height
+	if (nScreenRatioFixOffset > 0)
+	{
+		// Fill left and right bars from 4x3 video on 16x9 display with black
+		SCR_FillRect(0, 0, nScreenRatioFixOffset, SCREEN_HEIGHT, g_color_table[0] /* black color */);
+		SCR_FillRect(SCREEN_WIDTH - nScreenRatioFixOffset, 0, nScreenRatioFixOffset, SCREEN_HEIGHT, g_color_table[0] /* black color */);
+	}
 
 	re->DrawStretchRaw( x, y, w, h, cinTable[handle].drawX, cinTable[handle].drawY, buf, handle, cinTable[handle].dirty);
 	cinTable[handle].dirty = qfalse;
@@ -1654,8 +1705,51 @@ void CL_PlayCinematic_f(void) {
 	}
 
 	S_StopAllSounds ();
+	
+	////////////////////////////////////////////////////////////////////
+	// 
+	// Fix display ratio
 
-	CL_handle = CIN_PlayCinematic( arg, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, bits );
+	const float VideoRatio = (float)SCREEN_HEIGHT / (float)SCREEN_WIDTH;
+	float scrWidthOffs = ((float)cls.glconfig.vidWidth /* screen width */ - (float)cls.glconfig.vidHeight / VideoRatio /* desired width */) * 0.5f;
+	nScreenRatioFixOffset = (int)(scrWidthOffs * (float)SCREEN_WIDTH / (float)cls.glconfig.vidWidth);
+
+#if ASPECT_RATIO_FIX
+	if (ASPECT_RATIO_STRETCH_TO_HEIGHT /* stretch video to screen height */)
+	{
+		if (nScreenRatioFixOffset < 5 || nScreenRatioFixOffset > SCREEN_WIDTH / 2)
+		{
+			nScreenRatioFixOffset = 0;
+			CL_handle = CIN_PlayCinematic(arg, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, bits);
+		}
+		else
+		{
+			SCR_FillRect(0, 0, nScreenRatioFixOffset, SCREEN_HEIGHT, g_color_table[0]);
+			SCR_FillRect(SCREEN_WIDTH - nScreenRatioFixOffset, 0, nScreenRatioFixOffset, SCREEN_HEIGHT, g_color_table[0]);
+			CL_handle = CIN_PlayCinematic(arg, nScreenRatioFixOffset, 0, SCREEN_WIDTH - nScreenRatioFixOffset * 2, SCREEN_HEIGHT, bits);
+		}
+	}
+	else /* stretch video to screen width */
+	{
+		// From JHAEnhanced
+		float new_height = SCREEN_HEIGHT;
+		float offset = 0;
+		if (nScreenRatioFixOffset > 5)
+		{
+			float ratio = (float)(SCREEN_WIDTH * cls.glconfig.vidHeight) / (float)(SCREEN_HEIGHT * cls.glconfig.vidWidth);
+			ratio = Com_Clamp(0.75f, 1.0f, ratio);
+			new_height = SCREEN_HEIGHT / ratio;
+			offset = (SCREEN_HEIGHT - (SCREEN_HEIGHT / ratio)) / 2.0f;
+		}
+		nScreenRatioFixOffset = 0;
+		CL_handle = CIN_PlayCinematic(arg, 0, offset, SCREEN_WIDTH, new_height, bits);
+		// END From JHAEnhanced
+	}
+#else
+	nScreenRatioFixOffset = 0;
+	CL_handle = CIN_PlayCinematic(arg, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, bits);
+#endif	
+
 	if (CL_handle >= 0) {
 		do {
 			SCR_RunCinematic();
