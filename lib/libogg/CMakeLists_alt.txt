@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.10)
+project(libogg C)
+
+set(CMAKE_C_STANDARD 99)
+
+add_library(libogg STATIC
+    src/bitwise.c
+    src/framing.c
+)
+
+target_include_directories(libogg PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# Добавляем нужные определения для MSVC
+if (MSVC)
+    target_compile_definitions(libogg PRIVATE
+        _CRT_SECURE_NO_DEPRECATE
+        _CRT_NONSTDC_NO_DEPRECATE
+        _BIND_TO_CURRENT_CRT_VERSION
+    )
+endif()

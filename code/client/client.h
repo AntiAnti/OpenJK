@@ -402,6 +402,93 @@ void	SCR_PrecacheScreenshot();
 //
 // cl_cin.c
 //
+
+#define BASE_ROQ_FRAME_SIZE 65536 // 65536 was enough for 1024x1024, and max supported now is 2048x2048
+#define MAX_ROQ_FRAME_SIZE	(unsigned int)(BASE_ROQ_FRAME_SIZE * 4)
+
+typedef struct {
+	byte*				linbuf = NULL; // allocate dynamically for two frames, depending on CIN_WIDTH and CIN_HEIGHT
+	byte				file[MAX_ROQ_FRAME_SIZE]; // @TODO: allocate dynamically to support resolution higher than 2K
+	short				sqrTable[256];
+
+	int					mcomp[256];
+	byte**				qStatus[2] = { NULL, NULL }; // allocate dynamically
+	int					linbufCapacity = 0;
+	int					qStatusCapacity = 0;
+
+	long				oldXOff, oldYOff, oldysize, oldxsize;
+
+	int					currentHandle;
+} cinematics_t;
+
+typedef struct {
+	// cin
+	cinematics_t*		cin;
+
+	// video processing callbacks
+	unsigned short		(*yuv2rgb)(long y, long u, long v);
+	unsigned int		(*yuv2rgb24)(long y, long u, long v);
+
+	// audio processing callbacks
+	long				(*Audio_DecodeMonoToStereo)(unsigned char* from, short* to, unsigned int size, char signedOutput, unsigned short flag);
+	long				(*Audio_DecodeStereoToStereo)(unsigned char* from, short* to, unsigned int size, char signedOutput, unsigned short flag);
+} cin_interface;
+
+typedef enum
+{
+	VIDEO_ROQ = 0,
+#ifdef DECODER_OGV
+	VIDEO_OGV = 1,
+#endif
+#ifdef DECODER_X256
+	VIDEO_X256
+#endif
+	MAX
+} cinVideoFormat;
+
+typedef struct {
+	char				fileName[MAX_OSPATH];
+	int					CIN_WIDTH, CIN_HEIGHT;
+	int					xpos, ypos, width, height;
+	qboolean			looping, holdAtEnd, dirty, alterGameState, silent, shader;
+	cinVideoFormat		videoFormat;
+	fileHandle_t		iFile;	// 0 = none
+	e_status			status;
+	unsigned int		startTime;
+	unsigned int		lastTime;
+	long				tfps;
+	long				RoQPlayed;
+	long				ROQSize;
+	unsigned int		RoQFrameSize;
+	long				onQuad;
+	long				numQuads;
+	long				samplesPerLine;
+	unsigned int		roq_id;
+	long				screenDelta;
+
+	void				(*VQ0)(byte* status, void* qdata);
+	void				(*VQ1)(byte* status, void* qdata);
+	void				(*VQNormal)(byte* status, void* qdata);
+	void				(*VQBuffer)(byte* status, void* qdata);
+
+	long        		samplesPerPixel = 4;
+	byte* gray;
+	unsigned int		xsize, ysize, maxsize, minsize;
+
+	qboolean			half, smootheddouble, inMemory;
+	long				normalBuffer0;
+	long				roq_flags;
+	long				roqF0;
+	long				roqF1;
+	long				t[2];
+	long				roqFPS;
+	int					playonwalls;
+	byte* buf;
+	long				drawX, drawY;
+	sfxHandle_t			hSFX;	// 0 = none
+	qhandle_t			hCRAWLTEXT;	// 0 = none
+} cin_cache;
+
 void CL_PlayCinematic_f( void );
 void CL_PlayInGameCinematic_f(void);
 qboolean CL_CheckPendingCinematic(void);
@@ -419,6 +506,30 @@ void CIN_SetExtents (int handle, int x, int y, int w, int h);
 void CIN_SetLooping (int handle, qboolean loop);
 void CIN_UploadCinematic(int handle);
 void CIN_CloseAllVideos(void);
+
+//
+// cl_videoroq.c
+//
+
+void ROQ_InitSystem(cin_interface shared_data, cin_cache* table); // initialize all RoQ stuff
+void ROQ_Shutdown(void);
+qboolean ROQ_StartFile(cin_cache* table); // read video/audio header from file to table
+void ROQ_Reset(cin_cache* table); // reset current video
+void ROQ_ReadFrame(cin_cache* table, int timeNow); // continue reading file frames, process them and save to buffers
+void ROQ_StopVideo(cin_cache* table); // stop playing video
+
+#ifdef DECODER_OGV
+//
+// cl_videoogv.c
+//
+
+void OGV_InitSystem(cin_interface shared_data, cin_cache* table); // initialize all RoQ stuff
+void OGV_Shutdown(void);
+qboolean OGV_StartFile(cin_cache* table); // read video/audio header from file to table
+void OGV_Reset(cin_cache* table); // reset current video
+void OGV_ReadFrame(cin_cache* table, int timeNow); // continue reading file frames, process them and save to buffers
+void OGV_StopVideo(cin_cache* table); // stop playing video
+#endif
 
 //
 // cl_cgame.c

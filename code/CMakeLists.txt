@@ -112,6 +112,21 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 		set(SPEngineIncludeDirectories ${SPEngineIncludeDirectories} ${SDL2_INCLUDE_DIRS})
 		set(SPEngineLibraries ${SPEngineLibraries} ${SDL2_LIBRARIES})
 	endif()
+	
+	if(UseInternalOGGVideo)
+		set(SPEngineLibraries
+			${SPEngineLibraries}
+			bundled_libogg
+			bundled_libtheora
+			bundled_vorbis
+		)
+		set(SPEngineIncludeDirectories
+			${SPEngineIncludeDirectories}
+			${OpenJKLibDir}/libogg/include
+			${OpenJKLibDir}/libtheora/include
+			${OpenJKLibDir}/libvorbis/include
+			)		
+	endif()
 
 	#    Source Files
 
@@ -122,6 +137,8 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 
 		"${SPDir}/client/cl_cgame.cpp"
 		"${SPDir}/client/cl_cin.cpp"
+		"${SPDir}/client/cl_videoroq.cpp"
+		"${SPDir}/client/cl_videoogv.cpp"
 		"${SPDir}/client/cl_console.cpp"
 		"${SPDir}/client/cl_input.cpp"
 		"${SPDir}/client/cl_keys.cpp"
@@ -147,6 +164,7 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 		"${SPDir}/client/vmachine.cpp"
 		"${SPDir}/client/vmachine.h"
 		)
+	
 	source_group("client" FILES ${SPEngineClientFiles})
 	set(SPEngineFiles ${SPEngineFiles} ${SPEngineClientFiles})
 
@@ -455,10 +473,16 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 	endfunction(add_sp_project)
 	if(BuildSPEngine)
 		add_sp_project(${SPEngine} "SP Client" ${SPDir} ${JKAInstallDir} ${JKASPClientComponent})
+		if(UseInternalOGGVideo)
+			target_compile_definitions(${SPEngine} PRIVATE DECODER_OGV=1)
+		endif()
 	endif(BuildSPEngine)
 	if(BuildJK2SPEngine)
 		set(SPEngineDefines ${SPEngineDefines} "JK2_MODE")
 		add_sp_project(${JK2SPEngine} "JK2 SP Client" ${JK2SPDir} ${JK2InstallDir} ${JK2SPClientComponent})
+		if(UseInternalOGGVideo)
+			target_compile_definitions(${JK2SPEngine} PRIVATE DECODER_OGV=1)
+		endif()		
 	endif(BuildJK2SPEngine)
 
 endif(BuildSPEngine OR BuildJK2SPEngine)

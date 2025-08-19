@@ -68,6 +68,12 @@ set(UseInternalPNGDefault    OFF)
 set(UseInternalJPEGDefault   OFF)
 set(UseInternalSDL2Default   OFF)
 
+#
+# Anti2
+# add bundled OGG video projects
+#
+set(UseInternalOGGVideo      ON)
+
 if(UseInternalLibs OR WIN32)
   set(UseInternalOpenALDefault ON)
   set(UseInternalZlibDefault   ON)
@@ -387,6 +393,12 @@ if(UseInternalPNG)
   add_subdirectory(lib/libpng)
 else()
   find_package(PNG REQUIRED)
+endif()
+
+if(UseInternalOGGVideo)
+  add_subdirectory(lib/libogg)
+  add_subdirectory(lib/libtheora)
+  add_subdirectory(lib/libvorbis)
 endif()
 
 # Always use bundled minizip (sets MINIZIP_{LIBRARIES,INCLUDE_DIR})
