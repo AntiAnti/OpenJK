@@ -195,7 +195,7 @@ typedef struct {
 
 	// Draw images for cinematic rendering, pass as 32 bit rgba
 	void	(*DrawStretchRaw) (int x, int y, int w, int h, int cols, int rows, const byte *data, int client, qboolean dirty);
-	void	(*DrawStretcVideoFrame) (int x, int y, int w, int h, int cols, int rows, const byte* planeY, const byte* planeU, const byte* planeV, int y_stride, int uv_stride, int cinHandle, qboolean dirty);
+	void	(*DrawStretchVideoFrame) (int x, int y, int w, int h, int cols, int rows, const byte* planeY, const byte* planeU, const byte* planeV, int y_stride, int uv_stride, int cinHandle, qboolean dirty);
 	void	(*UploadCinematic) (int cols, int rows, const byte *data, int client, qboolean dirty);
 
 	void	(*BeginFrame)( stereoFrame_t stereoFrame );

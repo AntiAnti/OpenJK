@@ -814,7 +814,7 @@ void CIN_DrawCinematic (int handle) {
 		else // we have non-square video output (for example, 1080p)
 		{
 			if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV()) {
-				re.DrawStretcVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
+				re.DrawStretchVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
 					cinTable[handle].bufY, cinTable[handle].bufU, cinTable[handle].bufV,
 					cinTable[handle].bufY_stride, cinTable[handle].bufUV_stride,
 					0, cinTable[handle].dirty);
@@ -841,7 +841,7 @@ void CIN_DrawCinematic (int handle) {
 	{
 		if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV()) {
 			// video decoder uses YUV420, and renderer supports it
-			re.DrawStretcVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
+			re.DrawStretchVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
 				cinTable[handle].bufY, cinTable[handle].bufU, cinTable[handle].bufV, cinTable[handle].bufY_stride, cinTable[handle].bufUV_stride,
 				0, cinTable[handle].dirty);
 		}
