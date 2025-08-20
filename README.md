@@ -2,6 +2,11 @@
 
 This is my attempt to improve quality of cinematics in JA SP. Two formats are supported now: original RoQ and new OGV (theora). Resolution of RoQ video was increased from 512x512 to 1024x1024 and 2048x2048. OGV support isn't ready yet but it works. To improve performance, I process frames decoded by theora on GPU, but this is only possible with rend2 (in console "cl_renderer rdsp-rend2;vid_restart").
 
+> [!NOTE]
+> Some technical info. For a video with frame rate = 30 we have 33 ms frame budget (usually rounded to 30). On my PC for 1920x1080 video: frame decoding takes ~5 ms, but for heavy frames it may go to 10-11 ms. We also need to convert YUV420 data to RGBA (add 4-5 ms on x86 CPU with SSE2) and 4-5 ms to blit this 16:9 image to square (2048x2048) texture. As you can see, I'm in safe with 20 ms at max, but user with weaker CPU can lose "heavy" frames. Fortunately, everything after frame decoding can be processed on GPU.
+>
+> Conclusion: you're completely safe with vanilla renderer and 720p video. For 1080p it's not strictly necessary, but better to use rend2. 2K video also could work fine with rend2, but I limited width of the buffer to 2048px. For absolutely no reason, I'm just greedy for VRAM.
+
 OGV libraries (**ogg** itself, **theora** video decoder and **vorbis** audio decoder) are included as bundled projects and (hopefully) should compile for Linux. There is UseInternalOGGVideo flag in the CMakeLists. Disable it to build the project without OGV support (but you still get 1k and 2k RoQ).
 
 Regardless of the specified extension of the video file name (if any specified), ogv has priority over roq. For example, if the script tried to read "video/ja02" or "video/ja02.roq", at first cl_cin.cpp would look for "video/jk02.ogv". To convert mp4-h264 video to OGV, use *ffmpeg2theora* or *Theora Converter .NET* (GUI for ffmpeg2theora). Keep in mind the game expects sample rate of audio in cinematics = 22050 Hz. I don't recommend to try 2K and 4K videos or frame rate higher than 30, since theora is purely software decoder.
