@@ -1,10 +1,10 @@
 # OpenJK
 
-This is my attempt to improve cinematics quality in JA. Two formats are now supported: original RoQ and new OGV (theora). Resolution of RoQ video was increased from 512x512 to 1024x1024 and 2048x2048. OGV support isn't ready yet but works. Don't recommend to try 2K and 4K videos, since theora is purely software decoder. To improve performance, I process decoded frame on GPU, but it's only possible with rend2. To convert mp4-h264 to ogv, use ffmpeg2theora or Theora Converter .NET (GUI-shell for ffmpeg2theora). Keep in mind the game expects sample rate of audio in cinematics = 22050 Hz.
+This is my attempt to improve quality of cinematics in JA SP. Two formats are supported now: original RoQ and new OGV (theora). Resolution of RoQ video was increased from 512x512 to 1024x1024 and 2048x2048. OGV support isn't ready yet but it works. To improve performance, I process frames decoded by theora on GPU, but this is only possible with rend2 (in console "cl_renderer rdsp-rend2;vid_restart").
 
-OGV libraries are included as bundled projects. Check CMakeLists for UseInternalOGGVideo. Disable it to build the project without OGV (but you still get 1k and 2k RoQ).
+OGV libraries (**ogg** itself, **theora** video decoder and **vorbis** audio decoder) are included as bundled projects and (hopefully) should compile for Linux. There is UseInternalOGGVideo flag in the CMakeLists. Disable it to build the project without OGV support (but you still get 1k and 2k RoQ).
 
-Regarless of the specified extension of the video file name (if any specified), ogv has priority over roq. For example, when trying to read "video/ja02" or "video/ja02.roq", at first it'll look for "video/jk02.ogv".
+Regardless of the specified extension of the video file name (if any specified), ogv has priority over roq. For example, if the script tried to read "video/ja02" or "video/ja02.roq", at first cl_cin.cpp would look for "video/jk02.ogv". To convert mp4-h264 video to OGV, use *ffmpeg2theora* or *Theora Converter .NET* (GUI for ffmpeg2theora). Keep in mind the game expects sample rate of audio in cinematics = 22050 Hz. I don't recommend to try 2K and 4K videos or frame rate higher than 30, since theora is purely software decoder.
 
 Active branch is rend2-unified-wip.
 
