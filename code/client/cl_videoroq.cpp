@@ -1036,4 +1036,9 @@ void ROQ_StopVideo(cin_cache* table)
 	roq::cin_info.cin->qStatusCapacity = 0;
 }
 
+qboolean ROQ_DataFormatYUV()
+{
+	return qfalse;
+}
+
 #undef _clamp

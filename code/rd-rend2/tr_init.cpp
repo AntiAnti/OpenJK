@@ -342,6 +342,32 @@ static void R_Splash()
 	ri.WIN_Present(&window);
 }
 
+static void R_InitVideoRenderingShader()
+{
+	int cinCliends = 1; // we won't play more than one cinematic at the same time
+	int i, j;
+
+	char tex_names[3][16] = { "*vrs_Y", "*vrs_U" , "*vrs_V" };
+
+	for (i = 0; i < cinCliends; i++) {
+		for (j = 0; j < 3; j++) { // Y, U, V
+			if (tr.scratchYUVTextures[i][j])
+				continue;
+
+			int tex_size = (j == 0) ? 2048 : 1024; // Y is full, U/V is half
+
+			tr.scratchYUVTextures[i][j] = R_CreateImage(tex_names[j], NULL, tex_size, tex_size, imgType_t::IMGTYPE_COLORALPHA, 0, 0);
+			GL_Bind(tr.scratchYUVTextures[i][j]);
+
+			qglTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tex_size, tex_size, 0, GL_R, GL_UNSIGNED_BYTE, NULL);
+			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		}
+	}
+}
+
 /*
 ** GLW_CheckForExtension
 
@@ -608,12 +634,15 @@ static void InitOpenGL( void )
 		// set default state
 		GL_SetDefaultState();
 
+		R_InitVideoRenderingShader();
 		R_Splash();	//get something on screen asap
 	}
 	else
 	{
 		// set default state
 		GL_SetDefaultState();
+
+		R_InitVideoRenderingShader();
 	}
 }
 
@@ -2423,7 +2452,9 @@ Q_EXPORT refexport_t* QDECL GetRefAPI ( int apiVersion, refimport_t *rimp ) {
 	re.LAGoggles = RE_LAGoggles;
 	re.Scissor = RE_Scissor;
 
+	// cinematics-related
 	re.DrawStretchRaw = RE_StretchRaw;
+	re.DrawStretcVideoFrame = RE_StretchVideoFrame;
 	re.UploadCinematic = RE_UploadCinematic;
 
 	re.BeginFrame = RE_BeginFrame;
@@ -2465,7 +2496,7 @@ Q_EXPORT refexport_t* QDECL GetRefAPI ( int apiVersion, refimport_t *rimp ) {
 
 	re.R_InitWorldEffects = stub_R_InitWorldEffects;
 	re.R_ClearStuffToStopGhoul2CrashingThings = R_ClearStuffToStopGhoul2CrashingThings;
-	re.inPVS = R_inPVS;
+	re.R_inPVS = R_inPVS;
 
 	re.tr_distortionAlpha = stub_get_tr_distortionAlpha;
 	re.tr_distortionStretch = stub_get_tr_distortionStretch;

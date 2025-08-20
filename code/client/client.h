@@ -303,6 +303,8 @@ extern	cvar_t	*cl_consoleKeys;
 extern	cvar_t	*cl_consoleUseScanCode;
 extern	cvar_t	*cl_consoleShiftRequirement;
 
+extern	cvar_t	*cl_renderer;
+
 //=================================================
 
 //
@@ -452,7 +454,7 @@ typedef struct {
 	int					xpos, ypos, width, height;
 	qboolean			looping, holdAtEnd, dirty, alterGameState, silent, shader;
 	cinVideoFormat		videoFormat;
-	fileHandle_t		iFile;	// 0 = none
+	fileHandle_t		iFile = NULL;	// 0 = none
 	e_status			status;
 	unsigned int		startTime;
 	unsigned int		lastTime;
@@ -483,10 +485,19 @@ typedef struct {
 	long				t[2];
 	long				roqFPS;
 	int					playonwalls;
-	byte* buf;
+	byte*				buf = NULL;
 	long				drawX, drawY;
-	sfxHandle_t			hSFX;	// 0 = none
-	qhandle_t			hCRAWLTEXT;	// 0 = none
+
+	// Pointers (not actual buffers) to raw decompressed data
+	// Used only for OGV and rend2
+	byte*				bufY = NULL;
+	byte*				bufU = NULL;
+	byte*				bufV = NULL;
+	int					bufY_stride = 0;
+	int					bufUV_stride = 0;
+
+	sfxHandle_t			hSFX = NULL;	// 0 = none
+	qhandle_t			hCRAWLTEXT = NULL;	// 0 = none
 } cin_cache;
 
 void CL_PlayCinematic_f( void );
@@ -517,6 +528,7 @@ qboolean ROQ_StartFile(cin_cache* table); // read video/audio header from file t
 void ROQ_Reset(cin_cache* table); // reset current video
 void ROQ_ReadFrame(cin_cache* table, int timeNow); // continue reading file frames, process them and save to buffers
 void ROQ_StopVideo(cin_cache* table); // stop playing video
+qboolean ROQ_DataFormatYUV(); // commands to push raw YUV buffers to renderer (only for rend2 and Theora)
 
 #ifdef DECODER_OGV
 //
@@ -529,6 +541,7 @@ qboolean OGV_StartFile(cin_cache* table); // read video/audio header from file t
 void OGV_Reset(cin_cache* table); // reset current video
 void OGV_ReadFrame(cin_cache* table, int timeNow); // continue reading file frames, process them and save to buffers
 void OGV_StopVideo(cin_cache* table); // stop playing video
+qboolean OGV_DataFormatYUV(); // commands to push raw YUV buffers to renderer (only for rend2 and Theora)
 #endif
 
 //

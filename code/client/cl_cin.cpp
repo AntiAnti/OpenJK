@@ -91,13 +91,14 @@ typedef struct {
 	void (*ReadFrame)(cin_cache* table, int timeNow);
 	void (*ResetToStart)(cin_cache* table);
 	void (*Stop)(cin_cache* table);
+	qboolean(*DataFormatYUV)(); // qtrue if YUV, qfalse if RGB32
 } videoDecoder;
 
 static videoDecoder videoDecoders[] =
 {
-	{ ROQ_InitSystem, ROQ_Shutdown, ROQ_StartFile, ROQ_ReadFrame, ROQ_Reset, ROQ_StopVideo },
+	{ ROQ_InitSystem, ROQ_Shutdown, ROQ_StartFile, ROQ_ReadFrame, ROQ_Reset, ROQ_StopVideo, ROQ_DataFormatYUV },
 #ifdef DECODER_OGV
-	{ OGV_InitSystem, OGV_Shutdown, OGV_StartFile, OGV_ReadFrame, OGV_Reset, OGV_StopVideo },
+	{ OGV_InitSystem, OGV_Shutdown, OGV_StartFile, OGV_ReadFrame, OGV_Reset, OGV_StopVideo, OGV_DataFormatYUV },
 #endif
 };
 
@@ -812,9 +813,17 @@ void CIN_DrawCinematic (int handle) {
 		}
 		else // we have non-square video output (for example, 1080p)
 		{
-			int newWidth = (w * cinTable[handle].drawX / cinTable[handle].CIN_WIDTH);
-			int newHeight = (h * cinTable[handle].drawX / cinTable[handle].CIN_HEIGHT);
-			re.DrawStretchRaw(x, y, newWidth, newHeight, cinTable[handle].drawX, cinTable[handle].drawY, buf, handle, cinTable[handle].dirty);
+			if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV()) {
+				re.DrawStretcVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
+					cinTable[handle].bufY, cinTable[handle].bufU, cinTable[handle].bufV,
+					cinTable[handle].bufY_stride, cinTable[handle].bufUV_stride,
+					0, cinTable[handle].dirty);
+			}
+			else {
+				int newWidth = (w * cinTable[handle].drawX / cinTable[handle].CIN_WIDTH);
+				int newHeight = (h * cinTable[handle].drawX / cinTable[handle].CIN_HEIGHT);
+				re.DrawStretchRaw(x, y, newWidth, newHeight, cinTable[handle].drawX, cinTable[handle].drawY, buf, handle, cinTable[handle].dirty);
+			}
 			cinTable[handle].dirty = qfalse;
 		}
 		return;
@@ -830,7 +839,16 @@ void CIN_DrawCinematic (int handle) {
 
 	if (cinTable[handle].dirty)
 	{
-		re.DrawStretchRaw(x, y, w, h, cinTable[handle].drawX, cinTable[handle].drawY, buf, handle, cinTable[handle].dirty);
+		if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV()) {
+			// video decoder uses YUV420, and renderer supports it
+			re.DrawStretcVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
+				cinTable[handle].bufY, cinTable[handle].bufU, cinTable[handle].bufV, cinTable[handle].bufY_stride, cinTable[handle].bufUV_stride,
+				0, cinTable[handle].dirty);
+		}
+		else // RGB32
+		{
+			re.DrawStretchRaw(x, y, w, h, cinTable[handle].drawX, cinTable[handle].drawY, buf, handle, cinTable[handle].dirty);
+		}
 		cinTable[handle].dirty = qfalse;
 	}
 }
@@ -1237,8 +1255,8 @@ void CIN_UploadCinematic(int handle) {
 			}
 		}
 
-		// Resample the video if needed
-		if (cinTable[handle].dirty && (cinTable[handle].CIN_WIDTH != cinTable[handle].drawX || cinTable[handle].CIN_HEIGHT != cinTable[handle].drawY))  {
+		// Resample video if needed
+		if (cinTable[handle].dirty && (cinTable[handle].CIN_WIDTH != cinTable[handle].drawX || cinTable[handle].CIN_HEIGHT != cinTable[handle].drawY)) {
 			int *buf2;
 
 			buf2 = (int *)Z_Malloc(256*256*4, TAG_TEMP_WORKSPACE, qfalse);

@@ -2579,6 +2579,8 @@ typedef struct trGlobals_s {
 	image_t					*smaaEdgeImage;
 	image_t					*smaaBlendImage;
 	image_t					*smaaResolveImage;
+	// cinematics YUV buffers
+	image_t					*scratchYUVTextures[1][3];
 
 	FBO_t					*renderFbo;
 	FBO_t					*depthVelocityFbo;
@@ -2639,6 +2641,7 @@ typedef struct trGlobals_s {
 	// GPU shader programs
 	//
 	shaderProgram_t splashScreenShader;
+	shaderProgram_t yuv2rgbShader; // for cinematics
 	shaderProgram_t genericShader[GENERICDEF_COUNT];
 	shaderProgram_t refractionShader[REFRACTIONDEF_COUNT];
 	shaderProgram_t textureColorShader[TEXCOLORDEF_COUNT];
@@ -3062,6 +3065,12 @@ extern glconfig_t  glConfig;
 extern glconfigExt_t	glConfigExt;
 
 void	RE_StretchRaw (int x, int y, int w, int h, int cols, int rows, const byte *data, int client, qboolean dirty);
+// [x, y, w, h] - target rectangle on screen,
+// [cols, rows] - video frame size ex. 1920*1080,
+// [planeY, planeU, planeV] - YUV 420 image data,
+// y_stride - Y line stride
+// uv_stride - U and V line stride
+void	RE_StretchVideoFrame (int x, int y, int w, int h, int cols, int rows, const byte* planeY, const byte* planeU, const byte* planeV, int y_stride, int uv_stride, int cinHandle, qboolean dirty);
 void	RE_UploadCinematic (int cols, int rows, const byte *data, int client, qboolean dirty);
 void	RE_SetRangedFog ( float range );
 #ifdef REND2_SP
@@ -3414,6 +3423,7 @@ GLSL
 */
 
 void GLSL_InitSplashScreenShader();
+void GLSL_InitYUVShader(); // for cinematics
 void GLSL_LoadGPUShaders();
 void GLSL_ShutdownGPUShaders(void);
 void GLSL_VertexAttribsState(uint32_t stateBits, VertexArraysProperties *vertexArrays);

@@ -1691,6 +1691,109 @@ void RE_StretchRaw (int x, int y, int w, int h, int cols, int rows, const byte *
 	RB_InstantQuad2(quadVerts, texCoords);
 }
 
+/*
+=============
+RE_StretchVideoFrame
+
+FIXME: not exactly backend
+Stretches a raw 24-bit YUV-420 image up to 2048x2048 size over the given screen rectangle.
+Used for cinematics.
+=============
+*/
+void RE_StretchVideoFrame(int x, int y, int w, int h,
+	int cols, int rows,
+	const byte* planeY, const byte* planeU, const byte* planeV,
+	int y_stride, int uv_stride,
+	int cinHandle, qboolean dirty) {
+	vec4_t quadVerts[4];
+	vec2_t texCoords[4];
+
+	if (!tr.registered) {
+		return;
+	}
+	if (!tr.scratchYUVTextures[cinHandle][0])
+	{
+		return;
+	}
+	R_IssuePendingRenderCommands();
+
+	if (tess.numIndexes) {
+		RB_EndSurface();
+	}
+
+	qglFinish();
+
+	// upload Y, U, V buffers into 2K/1K textures
+	{		
+		// --- alignment for buffers ---
+		GLint prevUnpackAlign, prevRowLength;
+		qglGetIntegerv(GL_UNPACK_ALIGNMENT, &prevUnpackAlign);
+		qglGetIntegerv(GL_UNPACK_ROW_LENGTH, &prevRowLength);
+
+		// one byte per pixel
+		qglPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+		// Y (cols x rows) in (2048 x 2048), paste to top left corner
+		qglActiveTexture(GL_TEXTURE0);
+		GL_Bind(tr.scratchYUVTextures[cinHandle][0]);
+		if (dirty) {
+			qglPixelStorei(GL_UNPACK_ROW_LENGTH, y_stride);  // line stride
+			qglTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cols, rows, GL_RED, GL_UNSIGNED_BYTE, planeY);
+		}
+
+		// U (cols/2 x rows/2) to (1024 x 1024)
+		qglActiveTexture(GL_TEXTURE1);
+		GL_Bind(tr.scratchYUVTextures[cinHandle][1]);
+		if (dirty) {
+			qglPixelStorei(GL_UNPACK_ROW_LENGTH, uv_stride); // line stride
+			qglTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cols >> 1, rows >> 1, GL_RED, GL_UNSIGNED_BYTE, planeU);
+		}
+
+		// V (cols/2 x rows/2) to (1024 x 1024)
+		qglActiveTexture(GL_TEXTURE2);
+		GL_Bind(tr.scratchYUVTextures[cinHandle][2]);
+		if (dirty) {
+			qglPixelStorei(GL_UNPACK_ROW_LENGTH, uv_stride); // line stride
+			qglTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cols >> 1, rows >> 1, GL_RED, GL_UNSIGNED_BYTE, planeV);
+		}
+
+		// restore state
+		qglPixelStorei(GL_UNPACK_ALIGNMENT, prevUnpackAlign);
+		qglPixelStorei(GL_UNPACK_ROW_LENGTH, prevRowLength);
+		qglActiveTexture(GL_TEXTURE0);
+	}
+
+	// FIXME: HUGE hack
+	if (!tr.renderFbo || backEnd.framePostProcessed)
+		FBO_Bind(NULL);
+	else
+		FBO_Bind(tr.renderFbo);
+
+	RB_SetGL2D();
+
+	// target screen rectangle to veritces
+	VectorSet4(quadVerts[0], x, y, 0.0f, 1.0f);
+	VectorSet4(quadVerts[1], x + w, y, 0.0f, 1.0f);
+	VectorSet4(quadVerts[2], x + w, y + h, 0.0f, 1.0f);
+	VectorSet4(quadVerts[3], x, y + h, 0.0f, 1.0f);
+
+	// texture coordinates
+	float u = (float)cols / 2048.0f;
+	float v = (float)rows / 2048.0f;
+	VectorSet2(texCoords[0], 0.0f, 0.0f);
+	VectorSet2(texCoords[1], u, 0.0f);
+	VectorSet2(texCoords[2], u, v);
+	VectorSet2(texCoords[3], 0.0f, v);
+
+	// bind YUV image shader
+	
+	GLSL_BindProgram(&tr.yuv2rgbShader);	
+	GLSL_SetUniformMatrix4x4(&tr.yuv2rgbShader, UNIFORM_MODELVIEWPROJECTIONMATRIX, glState.modelviewProjection);
+
+	// finally draw
+	RB_InstantQuad2(quadVerts, texCoords);
+}
+
 void RE_UploadCinematic (int cols, int rows, const byte *data, int client, qboolean dirty) {
 
 	GL_Bind( tr.scratchImage[client] );

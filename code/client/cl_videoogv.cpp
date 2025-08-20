@@ -44,14 +44,12 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include <vorbis/codec.h>
 #include <theora/theora.h>
 
-#include <malloc.h>
-
 #pragma warning(suppress : 6387)
 
 #define OGG_BUFFER_SIZE		(8 * 1024)
 #define OGG_PCM_SAMPLEWIDTH	2 // audio bytes per sample (16-bit audio)
 
-// audio processing is under developing, everything should change
+// audio processing is under development, everything has to change
 #define SIZEOF_RAWBUFF		(2*2 * 1024*16)
 #define MIN_AUDIO_PRELOAD	500		/* 200 in ms */
 #define MAX_AUDIO_PRELOAD	8000	/*4096*/
@@ -177,6 +175,11 @@ void OGV_BlitFrameToTexture(int frameWidth, int frameHeight)
 	}
 }
 
+qboolean OGV_DataFormatYUV()
+{
+	return (qboolean)(Q_stristr(cl_renderer->string, "rend2") != NULL);
+}
+
 /******************************************************************************
 *
 * Function: OGV_LoadVideoFrame
@@ -190,7 +193,7 @@ int OGV_LoadVideoFrame()
 	ogg_packet op;
 	while (ogg_stream_packetout(&g_ogm.stream_video, &op) > 0)
 	{
-		//int thisTimeA = Sys_Milliseconds();
+		int thisTimeA = Sys_Milliseconds();
 		ogg_int64_t th_frame;
 
 		theora_decode_packetin(&g_ogm.th_state, &op);
@@ -209,33 +212,54 @@ int OGV_LoadVideoFrame()
 				ogv::activeTable->buf = ogv::cin_info.cin->linbuf;
 			byte* out = ogv::activeTable->buf;
 
-			//int thisTimeB = Sys_Milliseconds();
+			int thisTimeB = Sys_Milliseconds();
+			int thisTimeC = thisTimeB;
 
 			yuv_buffer* yuv = &g_ogm.th_yuvbuffer;
-			yuv420_to_argb8888(
-				yuv->y,
-				yuv->u,
-				yuv->v,
-				yuv->y_stride,
-				yuv->uv_stride,
-				yuv->y_width,
-				yuv->y_height,
-				(uint32_t*)ogv::activeTable->buf,
-				yuv->y_width
-			);
+			if (OGV_DataFormatYUV()) {
+				// rend2: let's process video frame on GPU
 
-			//OGV_YUV2ARGB((const byte*)g_ogm.th_yuvbuffer.y, g_ogm.th_yuvbuffer.y_width, g_ogm.th_yuvbuffer.y_height, ogv::activeTable->buf);
+				// i'll better hope offsets are zero
+				//ogg_uint32_t offset_x = g_ogm.th_info.offset_x;
+				//ogg_uint32_t offset_y = g_ogm.th_info.offset_y;
 
-			if (_texture_frame_mismatch(ogv::activeTable))
-			{
-				OGV_BlitFrameToTexture(yuv->y_width, yuv->y_height);
+				ogv::activeTable->bufY = yuv->y;
+				ogv::activeTable->bufU = yuv->u;
+				ogv::activeTable->bufV = yuv->v;
+				ogv::activeTable->bufY_stride = yuv->y_stride;
+				ogv::activeTable->bufUV_stride = yuv->uv_stride;
+			}
+			else {
+				// vanilla renderer
+				yuv420_to_argb8888(
+					yuv->y,
+					yuv->u,
+					yuv->v,
+					yuv->y_stride,
+					yuv->uv_stride,
+					yuv->y_width,
+					yuv->y_height,
+					(uint32_t*)ogv::activeTable->buf,
+					yuv->y_width
+				);
+
+				thisTimeC = Sys_Milliseconds();
+
+				if (_texture_frame_mismatch(ogv::activeTable))
+				{
+					OGV_BlitFrameToTexture(yuv->y_width, yuv->y_height);
+				}
 			}
 
 			g_ogm.VFrameCount = th_frame;
 			ogv::activeTable->numQuads++;
 
-			//int thisTimeC = Sys_Milliseconds();
-			//Com_Printf("Frame decode: %d | yuv-to-rgb32: %d\n", thisTimeB - thisTimeA, thisTimeC - thisTimeB);
+			int thisTimeD = Sys_Milliseconds();
+			// Debug
+			if (thisTimeD - thisTimeA > 20)
+			{
+				Com_Printf("Frame decode: %d | yuv-to-rgb32: %d | blit: %d\n", thisTimeB - thisTimeA, thisTimeC - thisTimeB, thisTimeD - thisTimeC);
+			}
 
 			return 1; // has frame
 		}
@@ -305,10 +329,12 @@ qboolean OGV_LoadAudio()
 			}
 
 			// debug
+			/*
 			if (RemainingMsInBuffer < 100)
 			{
 				Com_Printf("s_soundtime: %d | s_rawend: %d | audioQueuedPairs: %d | RemainingMsInBuffer: %d\n", s_soundtime, s_rawend, g_ogm.audioQueuedPairs, RemainingMsInBuffer);
 			}
+			*/
 
 			if (g_ogm.audioQueuedPairs == 0) {
 				S_Update();
@@ -622,7 +648,7 @@ qboolean OGV_StartFile(cin_cache* table)
 
 		// prepare temp buffer for BlitFrameToTexture
 		long totalOffsetBytes = (ogv::activeTable->drawX * ogv::activeTable->samplesPerPixel) * (ogv::activeTable->CIN_HEIGHT - 1);
-		long totalInFrameSizeBytes = ogv::activeTable->CIN_WIDTH * ogv::activeTable->CIN_HEIGHT * ogv::activeTable->samplesPerPixel;
+		long totalInFrameSizeBytes = (ogv::activeTable->CIN_WIDTH + 16 /* keep pad for alignment */) * ogv::activeTable->CIN_HEIGHT * ogv::activeTable->samplesPerPixel;
 		// do we even need a buffer to copy frame
 		if (totalInFrameSizeBytes < totalOffsetBytes)
 		{

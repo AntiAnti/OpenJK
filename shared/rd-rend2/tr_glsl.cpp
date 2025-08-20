@@ -2706,6 +2706,129 @@ static int GLSL_LoadGPUProgramSMAA(
 	return 4;
 }
 
+static int GLSL_LoadYUVShader(ShaderProgramBuilder& builder, Allocator& scratchAlloc)
+{
+	const char* extradefines = "#define USE_VERTICES\n";
+	GLSL_LoadGPUProgramBasicWithDefinitions(
+		builder,
+		scratchAlloc,
+		&tr.yuv2rgbShader,
+		"textureYUVtoRGB",
+		fallback_textureYUVtoRGBProgram,
+		extradefines);
+
+	GLint status = 0;
+	qglGetProgramiv(tr.yuv2rgbShader.program, GL_LINK_STATUS, &status);
+	if (status != GL_TRUE) {
+		char log[4096];
+		GLsizei len = 0;
+		qglGetProgramInfoLog(tr.yuv2rgbShader.program, sizeof(log), &len, log);
+		ri.Printf(PRINT_ALL, "YUV shader link error:\n%s\n", log);
+
+		return 0;
+	}
+
+	GLSL_InitUniforms(&tr.yuv2rgbShader);
+	qglUseProgram(tr.yuv2rgbShader.program);
+	{
+		qglUniform1i(qglGetUniformLocation(tr.yuv2rgbShader.program, "u_DiffuseY"), 0);
+		qglUniform1i(qglGetUniformLocation(tr.yuv2rgbShader.program, "u_DiffuseU"), 1);
+		qglUniform1i(qglGetUniformLocation(tr.yuv2rgbShader.program, "u_DiffuseV"), 2);
+	}
+	qglUseProgram(0);
+	GLSL_FinishGPUShader(&tr.yuv2rgbShader);
+
+	/*
+	const char* vs =
+		"#version 150 core\n"
+		"#define USE_VERTICES\n"
+		"//[Vertex]\n"
+		"#if defined(USE_VERTICES)\n"
+		"in vec3 attr_Position;\n"
+		"in vec4 attr_TexCoord0;\n"
+		"\n"
+		"uniform mat4 u_ModelViewProjectionMatrix;\n"
+		"#endif\n"
+		"out vec2 var_Tex1;\n"
+		"\n"
+		"void main()\n"
+		"{\n"
+		"#if defined(USE_VERTICES)\n"
+		"    gl_Position = u_ModelViewProjectionMatrix * vec4(attr_Position, 1.0);\n"
+		"    var_Tex1 = attr_TexCoord0.st;   // only XY\n"
+		"#else\n"
+		"    vec2 position = vec2(2.0 * float(gl_VertexID & 2) - 1.0,\n"
+		"                         4.0 * float(gl_VertexID & 1) - 1.0);\n"
+		"    gl_Position = vec4(position, 0.0, 1.0);\n"
+		"    var_Tex1 = position * 0.5 + vec2(0.5);\n"
+		"#endif\n"
+		"}";
+
+	const char* fs =
+		"#version 150 core\n"
+		"uniform sampler2D u_DiffuseY;\n"
+		"uniform sampler2D u_DiffuseU;\n"
+		"uniform sampler2D u_DiffuseV;\n"
+		"\n"
+		"in vec2 var_Tex1;\n"
+		"out vec4 out_Color;\n"
+		"\n"
+		"void main()\n"
+		"{\n"
+		"    float y = texture(u_DiffuseY, var_Tex1).r;\n"
+		"    float u = texture(u_DiffuseU, var_Tex1).r - 0.5;\n"
+		"    float v = texture(u_DiffuseV, var_Tex1).r - 0.5;\n"
+		"    float r = y + 1.5748  * v;\n"
+		"    float g = y - 0.1873  * u - 0.4681 * v;\n"
+		"    float b = y + 1.8556  * u;\n"
+		"    out_Color = vec4(r, g, b, 1.0);\n"
+		"}";
+
+	GLuint vshader = qglCreateShader(GL_VERTEX_SHADER);
+	qglShaderSource(vshader, 1, &vs, NULL);
+	qglCompileShader(vshader);
+
+	GLuint fshader = qglCreateShader(GL_FRAGMENT_SHADER);
+	qglShaderSource(fshader, 1, &fs, NULL);
+	qglCompileShader(fshader);
+
+	GLuint program = qglCreateProgram();
+	qglAttachShader(program, vshader);
+	qglAttachShader(program, fshader);
+	qglLinkProgram(program);
+
+	GLint status = 0;
+	qglGetProgramiv(program, GL_LINK_STATUS, &status);
+	if (status != GL_TRUE) {
+		char log[4096];
+		GLsizei len = 0;
+		qglGetProgramInfoLog(program, sizeof(log), &len, log);
+		ri.Printf(PRINT_ALL, "YUV shader link error:\n%s\n", log);
+	}
+
+	// Clean up individual shaders (they're now part of the program)
+	qglDeleteShader(vshader);
+	qglDeleteShader(fshader);
+
+	size_t yuv2rgbLen = strlen("yuv2rgb");
+	tr.yuv2rgbShader.program = program;
+	tr.yuv2rgbShader.name = (char*)R_Malloc(yuv2rgbLen + 1, TAG_GENERAL);
+	GLSL_InitUniforms(&tr.yuv2rgbShader);
+	Q_strncpyz(tr.yuv2rgbShader.name, "yuv2rgb", yuv2rgbLen + 1);
+
+	GLSL_InitUniforms(&tr.yuv2rgbShader);
+
+	// bind textures
+	qglUseProgram(tr.yuv2rgbShader.program);
+	qglUniform1i(qglGetUniformLocation(tr.yuv2rgbShader.program, "u_DiffuseY"), 0);
+	qglUniform1i(qglGetUniformLocation(tr.yuv2rgbShader.program, "u_DiffuseU"), 1);
+	qglUniform1i(qglGetUniformLocation(tr.yuv2rgbShader.program, "u_DiffuseV"), 2);
+	qglUseProgram(0);
+	*/
+	return 1;
+}
+
+
 void GLSL_LoadGPUShaders()
 {
 #if 0
@@ -2793,7 +2916,7 @@ void GLSL_LoadGPUShaders()
 	numEtcShaders += GLSL_LoadGPUProgramDynamicGlowUpsample(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramDynamicGlowDownsample(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramSurfaceSprites(builder, allocator);
-	numEtcShaders += GLSL_LoadGPUProgramWeather(builder, allocator);
+	numEtcShaders += GLSL_LoadYUVShader(builder, allocator);
 	if (r_smaa->integer)
 		numEtcShaders += GLSL_LoadGPUProgramSMAA(builder, allocator);
 
@@ -2814,6 +2937,8 @@ void GLSL_ShutdownGPUShaders(void)
 	GLSL_BindNullProgram();
 
 	GLSL_DeleteGPUShader(&tr.splashScreenShader);
+
+	GLSL_DeleteGPUShader(&tr.yuv2rgbShader);
 
 	for ( i = 0; i < GENERICDEF_COUNT; i++)
 		GLSL_DeleteGPUShader(&tr.genericShader[i]);

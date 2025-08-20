@@ -30,7 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../ghoul2/G2.h"
 #include "../ghoul2/ghoul2_gore.h"
 
-#define	REF_API_VERSION		19
+#define	REF_API_VERSION		20
 
 typedef struct {
 	void				(QDECL *Printf)						( int printLevel, const char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
@@ -195,6 +195,7 @@ typedef struct {
 
 	// Draw images for cinematic rendering, pass as 32 bit rgba
 	void	(*DrawStretchRaw) (int x, int y, int w, int h, int cols, int rows, const byte *data, int client, qboolean dirty);
+	void	(*DrawStretcVideoFrame) (int x, int y, int w, int h, int cols, int rows, const byte* planeY, const byte* planeU, const byte* planeV, int y_stride, int uv_stride, int cinHandle, qboolean dirty);
 	void	(*UploadCinematic) (int cols, int rows, const byte *data, int client, qboolean dirty);
 
 	void	(*BeginFrame)( stereoFrame_t stereoFrame );
