@@ -1,5 +1,15 @@
 # OpenJK
 
+This is my attempt to improve cinematics quality in JA. Two formats are now supported: original RoQ and new OGV (theora). Resolution of RoQ video was increased from 512x512 to 1024x1024 and 2048x2048. OGV support isn't ready yet but works. Don't recommend to try 2K and 4K videos, since theora is purely software decoder. To improve performance, I process decoded frame on GPU, but it's only possible with rend2. To convert mp4-h264 to ogv, use ffmpeg2theora or Theora Converter .NET (GUI-shell for ffmpeg2theora). Keep in mind the game expects sample rate of audio in cinematics = 22050 Hz.
+
+OGV libraries are included as bundled projects. Check CMakeLists for UseInternalOGGVideo. Disable it to build the project without OGV (but you still get 1k and 2k RoQ).
+
+Regarless of the specified extension of the video file name (if any specified), ogv has priority over roq. For example, when trying to read "video/ja02" or "video/ja02.roq", at first it'll look for "video/jk02.ogv".
+
+Active branch is rend2-unified-wip.
+
+## Original Overview
+
 OpenJK is a community effort to maintain and improve the game and engine powering Jedi Academy and Jedi Outcast, while maintaining _full backwards compatibility_ with the existing games and mods.  
 This project does not intend to add major features, rebalance, or otherwise modify core gameplay.
 
