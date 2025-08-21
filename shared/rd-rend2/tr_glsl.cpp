@@ -2916,6 +2916,7 @@ void GLSL_LoadGPUShaders()
 	numEtcShaders += GLSL_LoadGPUProgramDynamicGlowUpsample(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramDynamicGlowDownsample(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramSurfaceSprites(builder, allocator);
+	numEtcShaders += GLSL_LoadGPUProgramWeather(builder, allocator);
 	numEtcShaders += GLSL_LoadYUVShader(builder, allocator);
 	if (r_smaa->integer)
 		numEtcShaders += GLSL_LoadGPUProgramSMAA(builder, allocator);

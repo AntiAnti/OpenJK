@@ -448,6 +448,7 @@ typedef enum
 	MAX
 } cinVideoFormat;
 
+// complete mess, need refactoring
 typedef struct {
 	char				fileName[MAX_OSPATH];
 	int					CIN_WIDTH, CIN_HEIGHT;
@@ -498,6 +499,10 @@ typedef struct {
 
 	sfxHandle_t			hSFX = NULL;	// 0 = none
 	qhandle_t			hCRAWLTEXT = NULL;	// 0 = none
+
+	// processing video frame, only for OGV
+	byte*				frameBufferTemp = NULL;	// used in BlitFrameToTexture frameBufferTemp[2048 * 2048 * 4];
+	int					frameBufferTempSize = 0;
 } cin_cache;
 
 void CL_PlayCinematic_f( void );
@@ -522,26 +527,26 @@ void CIN_CloseAllVideos(void);
 // cl_videoroq.c
 //
 
-void ROQ_InitSystem(cin_interface shared_data, cin_cache* table); // initialize all RoQ stuff
+void ROQ_InitSystem(cin_interface shared_data, cin_cache* tables); // initialize all RoQ stuff
 void ROQ_Shutdown(void);
-qboolean ROQ_StartFile(cin_cache* table); // read video/audio header from file to table
-void ROQ_Reset(cin_cache* table); // reset current video
-void ROQ_ReadFrame(cin_cache* table, int timeNow); // continue reading file frames, process them and save to buffers
-void ROQ_StopVideo(cin_cache* table); // stop playing video
-qboolean ROQ_DataFormatYUV(); // commands to push raw YUV buffers to renderer (only for rend2 and Theora)
+qboolean ROQ_StartFile(int handle); // read video/audio header from file to table
+void ROQ_Reset(int handle); // reset current video
+void ROQ_ReadFrame(int handle, int timeNow); // continue reading file frames, process them and save to buffers
+void ROQ_StopVideo(int handle); // stop playing video
+qboolean ROQ_DataFormatYUV(cin_cache* table); // commands to push raw YUV buffers to renderer (only for rend2 and Theora)
 
 #ifdef DECODER_OGV
 //
 // cl_videoogv.c
 //
 
-void OGV_InitSystem(cin_interface shared_data, cin_cache* table); // initialize all RoQ stuff
+void OGV_InitSystem(cin_interface shared_data, cin_cache* tables); // initialize all RoQ stuff
 void OGV_Shutdown(void);
-qboolean OGV_StartFile(cin_cache* table); // read video/audio header from file to table
-void OGV_Reset(cin_cache* table); // reset current video
-void OGV_ReadFrame(cin_cache* table, int timeNow); // continue reading file frames, process them and save to buffers
-void OGV_StopVideo(cin_cache* table); // stop playing video
-qboolean OGV_DataFormatYUV(); // commands to push raw YUV buffers to renderer (only for rend2 and Theora)
+qboolean OGV_StartFile(int handle); // read video/audio header from file to table
+void OGV_Reset(int handle); // reset current video
+void OGV_ReadFrame(int handle, int timeNow); // continue reading file frames, process them and save to buffers
+void OGV_StopVideo(int handle); // stop playing video
+qboolean OGV_DataFormatYUV(cin_cache* table); // commands to push raw YUV buffers to renderer (only for rend2 and Theora)
 #endif
 
 //

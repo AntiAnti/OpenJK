@@ -354,12 +354,14 @@ static void R_InitVideoRenderingShader()
 			if (tr.scratchYUVTextures[i][j])
 				continue;
 
-			int tex_size = (j == 0) ? 2048 : 1024; // Y is full, U/V is half
+			// let's set max width to 4K just to support 2K video (2650x1440)
+			int tex_width = (j == 0) ? 4096 : 2048; // Y is full, U/V is half
+			int tex_height = (j == 0) ? 2048 : 1024; // Y is full, U/V is half
 
-			tr.scratchYUVTextures[i][j] = R_CreateImage(tex_names[j], NULL, tex_size, tex_size, imgType_t::IMGTYPE_COLORALPHA, 0, 0);
+			tr.scratchYUVTextures[i][j] = R_CreateImage(tex_names[j], NULL, tex_width, tex_height, imgType_t::IMGTYPE_COLORALPHA, 0, 0);
 			GL_Bind(tr.scratchYUVTextures[i][j]);
 
-			qglTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tex_size, tex_size, 0, GL_R, GL_UNSIGNED_BYTE, NULL);
+			qglTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tex_width, tex_height, 0, GL_R, GL_UNSIGNED_BYTE, NULL);
 			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

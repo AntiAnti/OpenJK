@@ -81,18 +81,17 @@ typedef struct
 	short					audioBuffer[SIZEOF_RAWBUFF * 2];
 	ogg_int64_t				audioQueuedPairs;		// audio samples pushed to mixed
 	int						audioStartTime = 0;		// in ms
-	// processing video frame
-	byte*					frameBufferTemp = NULL;	// used in BlitFrameToTexture frameBufferTemp[2048 * 2048 * 4];
-	int						frameBufferTempSize = 0;
 } cin_ogv_t;
 
-cin_ogv_t					g_ogm;			// OGV data
+cin_ogv_t					g_ogms[16];		// OGV data
 extern int					s_soundtime;	// sample PAIRS
 //alignas(16) uint8_t		YUVa[3840 * 2160 * 4]; // 4K buffer for one frame YUV-RGB converstion
 
 namespace ogv {
 	cin_interface			cin_info;
+	cin_cache*				tables;
 	cin_cache*				activeTable;
+	int						activeHandle = -1; // only valid in helper functions called by interface functions
 }
 
 // predefinitions
@@ -170,13 +169,14 @@ void OGV_BlitFrameToTexture(int frameWidth, int frameHeight)
 		// Prepare buffer
 		long expectedTempBufferSize = frameWidth * frameHeight * bpp;
 		// Copy all to temp buffer
-		memcpy(g_ogm.frameBufferTemp, ogv::activeTable->buf, expectedTempBufferSize);
-		BlitFrameToTexture(g_ogm.frameBufferTemp, frameWidth, frameHeight, ogv::activeTable->buf, ogv::activeTable->drawX, ogv::activeTable->drawY, bpp);
+		memcpy(ogv::activeTable->frameBufferTemp, ogv::activeTable->buf, expectedTempBufferSize);
+		BlitFrameToTexture(ogv::activeTable->frameBufferTemp, frameWidth, frameHeight, ogv::activeTable->buf, ogv::activeTable->drawX, ogv::activeTable->drawY, bpp);
 	}
 }
 
-qboolean OGV_DataFormatYUV()
+qboolean OGV_DataFormatYUV(cin_cache* table)
 {
+	if (table && table->shader) return qfalse;
 	return (qboolean)(Q_stristr(cl_renderer->string, "rend2") != NULL);
 }
 
@@ -190,6 +190,8 @@ qboolean OGV_DataFormatYUV()
 
 int OGV_LoadVideoFrame()
 {
+	auto& g_ogm = g_ogms[ogv::activeHandle];
+
 	ogg_packet op;
 	while (ogg_stream_packetout(&g_ogm.stream_video, &op) > 0)
 	{
@@ -216,7 +218,7 @@ int OGV_LoadVideoFrame()
 			int thisTimeC = thisTimeB;
 
 			yuv_buffer* yuv = &g_ogm.th_yuvbuffer;
-			if (OGV_DataFormatYUV()) {
+			if (OGV_DataFormatYUV(ogv::activeTable)) {
 				// rend2: let's process video frame on GPU
 
 				// i'll better hope offsets are zero
@@ -245,7 +247,7 @@ int OGV_LoadVideoFrame()
 
 				thisTimeC = Sys_Milliseconds();
 
-				if (_texture_frame_mismatch(ogv::activeTable))
+				if (_texture_frame_mismatch(ogv::activeTable))// && !ogv::activeTable->shader)
 				{
 					OGV_BlitFrameToTexture(yuv->y_width, yuv->y_height);
 				}
@@ -256,7 +258,7 @@ int OGV_LoadVideoFrame()
 
 			int thisTimeD = Sys_Milliseconds();
 			// Debug
-			if (thisTimeD - thisTimeA > 20)
+			if (thisTimeD - thisTimeA > 25)
 			{
 				Com_Printf("Frame decode: %d | yuv-to-rgb32: %d | blit: %d\n", thisTimeB - thisTimeA, thisTimeC - thisTimeB, thisTimeD - thisTimeC);
 			}
@@ -269,6 +271,8 @@ int OGV_LoadVideoFrame()
 
 static inline int AudioBufferedMs()
 {
+	auto& g_ogm = g_ogms[ogv::activeHandle];
+
 	ogg_int64_t queued_pairs = (ogg_int64_t)(s_rawend - s_soundtime); // g_ogm.audioQueuedPairs - (ogg_int64_t)(s_soundtime - g_ogm.audioStartTime);
 	if (queued_pairs < 0) queued_pairs = 0;
 	return (int)((queued_pairs * 1000) / g_ogm.v_info.rate);
@@ -290,6 +294,12 @@ qboolean OGV_LoadAudio()
 	ogg_packet op;
 	vorbis_block vb;
 
+	auto& g_ogm = g_ogms[ogv::activeHandle];
+
+	if (!g_ogm.stream_audio.serialno)
+	{
+		return qfalse;
+	}
 	if (ogv::activeTable->silent)
 	{
 		// don't need audio
@@ -383,6 +393,8 @@ qboolean OGV_LoadBlockToSync()
 	char* buffer;
 	int  bytes;
 
+	auto& g_ogm = g_ogms[ogv::activeHandle];
+
 	if (ogv::activeTable->iFile)
 	{
 		buffer = ogg_sync_buffer(&g_ogm.sync_state, OGG_BUFFER_SIZE);
@@ -412,6 +424,8 @@ int OGV_LoadPagesToStreams()
 	int              VideoPages = 0;
 	ogg_stream_state* osptr = NULL;
 	ogg_page         og;
+
+	auto& g_ogm = g_ogms[ogv::activeHandle];
 
 	while (!AudioPages || !VideoPages)
 	{
@@ -447,18 +461,14 @@ int OGV_LoadPagesToStreams()
 
 //===================================================================================
 
-void OGV_InitSystem(cin_interface shared_data, cin_cache* table)
+void OGV_InitSystem(cin_interface shared_data, cin_cache* tables)
 {
 	ogv::cin_info = shared_data;
-	ogv::activeTable = table;
+	ogv::tables = tables;
 }
 
 void OGV_Shutdown(void)
 {
-	if (ogv::activeTable)
-	{
-		OGV_StopVideo(ogv::activeTable);
-	}
 }
 
 /******************************************************************************
@@ -469,15 +479,24 @@ void OGV_Shutdown(void)
 *
 ******************************************************************************/
 
-qboolean OGV_StartFile(cin_cache* table)
+qboolean OGV_StartFile(int handle)
 {
 	int        status;
 	ogg_page   og;
 	ogg_packet op;
 	int        i;
 
-	table->numQuads = -1;
-	table->RoQPlayed = 0;
+	if (ogv::tables && handle >= 0 && handle < 16)
+	{
+		ogv::activeTable = &ogv::tables[handle];
+		ogv::activeHandle = handle;
+	}
+	else return qfalse;
+
+	auto& g_ogm = g_ogms[handle];
+
+	ogv::activeTable->numQuads = -1;
+	ogv::activeTable->RoQPlayed = 0;
 	//FS_Read(ogv::cin_info.cin->file, 16, table->iFile);
 	memset(&g_ogm, 0, sizeof(cin_ogv_t));
 	
@@ -514,7 +533,6 @@ qboolean OGV_StartFile(cin_cache* table)
 
 	if (!g_ogm.stream_audio.serialno) {
 		Com_Printf(S_COLOR_YELLOW "WARNING: Haven't found a audio (vorbis) stream in ogm-file!\n");
-		return qfalse;
 	}
 
 	if (!g_ogm.stream_video.serialno)
@@ -524,33 +542,36 @@ qboolean OGV_StartFile(cin_cache* table)
 	}
 
 	// load vorbis header
-	vorbis_info_init(&g_ogm.v_info);
-	vorbis_comment_init(&g_ogm.v_comment);
-	i = 0;
-	while (i < 3) {
-		status = ogg_stream_packetout(&g_ogm.stream_audio, &op);
-		if (status < 0) {
-			Com_Printf(S_COLOR_YELLOW "WARNING: Corrupt ogg packet while loading vorbis-headers\n");
-			return qfalse;
-		}
-		if (status > 0) {
-			status = vorbis_synthesis_headerin(&g_ogm.v_info, &g_ogm.v_comment, &op);
-			if (i == 0 && status < 0)
-			{
-				Com_Printf(S_COLOR_YELLOW "WARNING: This Ogg bitstream does not contain Vorbis audio data\n");
+	if (g_ogm.stream_audio.serialno)
+	{
+		vorbis_info_init(&g_ogm.v_info);
+		vorbis_comment_init(&g_ogm.v_comment);
+		i = 0;
+		while (i < 3) {
+			status = ogg_stream_packetout(&g_ogm.stream_audio, &op);
+			if (status < 0) {
+				Com_Printf(S_COLOR_YELLOW "WARNING: Corrupt ogg packet while loading vorbis-headers\n");
 				return qfalse;
 			}
-			++i;
-		}
-		else if (OGV_LoadPagesToStreams()) {
-			if (OGV_LoadBlockToSync()) {
-				Com_Printf(S_COLOR_YELLOW "WARNING: Couldn't find all vorbis headers before end of the ofv file\n");
-				return qfalse;
+			if (status > 0) {
+				status = vorbis_synthesis_headerin(&g_ogm.v_info, &g_ogm.v_comment, &op);
+				if (i == 0 && status < 0)
+				{
+					Com_Printf(S_COLOR_YELLOW "WARNING: This Ogg bitstream does not contain Vorbis audio data\n");
+					return qfalse;
+				}
+				++i;
+			}
+			else if (OGV_LoadPagesToStreams()) {
+				if (OGV_LoadBlockToSync()) {
+					Com_Printf(S_COLOR_YELLOW "WARNING: Couldn't find all vorbis headers before end of the ofv file\n");
+					return qfalse;
+				}
 			}
 		}
-	}
 
-	vorbis_synthesis_init(&g_ogm.v_decoder, &g_ogm.v_info);
+		vorbis_synthesis_init(&g_ogm.v_decoder, &g_ogm.v_info);
+	}
 
 	// Load theora header
 	theora_info_init(&g_ogm.th_info);
@@ -585,16 +606,16 @@ qboolean OGV_StartFile(cin_cache* table)
 	// init table
 	g_ogm.Vtime_unit = ((ogg_int64_t)g_ogm.th_info.fps_denominator * 1000 * 10000 / g_ogm.th_info.fps_numerator);
 
-	ogv::activeTable->startTime = table->lastTime = Sys_Milliseconds() * com_timescale->value;
+	ogv::activeTable->startTime = ogv::activeTable->lastTime = Sys_Milliseconds() * com_timescale->value;
 
 	/*	get frame rate */
-	table->roqFPS = (g_ogm.th_info.fps_denominator > 0)
+	ogv::activeTable->roqFPS = (g_ogm.th_info.fps_denominator > 0)
 		? (long)((double)g_ogm.th_info.fps_numerator / (double)g_ogm.th_info.fps_denominator)
 		: 30;
 
-	if (table->hSFX)
+	if (ogv::activeTable->hSFX)
 	{
-		S_StartLocalSound(table->hSFX, CHAN_AUTO);
+		S_StartLocalSound(ogv::activeTable->hSFX, CHAN_AUTO);
 	}
 
 	g_ogm.audioQueuedPairs = 0;
@@ -653,30 +674,34 @@ qboolean OGV_StartFile(cin_cache* table)
 		if (totalInFrameSizeBytes < totalOffsetBytes)
 		{
 			long expectedTempBufferSize = totalInFrameSizeBytes;
-			if (g_ogm.frameBufferTempSize < expectedTempBufferSize)
+			if (ogv::activeTable->frameBufferTempSize < expectedTempBufferSize)
 			{
-				if (g_ogm.frameBufferTemp) Z_Free(g_ogm.frameBufferTemp);
-				g_ogm.frameBufferTemp = (byte*)Z_Malloc(g_ogm.frameBufferTempSize, TAG_TEMP_HUNKALLOC);
-				g_ogm.frameBufferTempSize = expectedTempBufferSize;
+				if (ogv::activeTable->frameBufferTemp) Z_Free(ogv::activeTable->frameBufferTemp);
+				ogv::activeTable->frameBufferTemp = (byte*)Z_Malloc(ogv::activeTable->frameBufferTempSize, TAG_TEMP_HUNKALLOC);
+				ogv::activeTable->frameBufferTempSize = expectedTempBufferSize;
 			}
 		}
 	}
 
-	table->status = FMV_PLAY;
+	ogv::activeTable->status = FMV_PLAY;
 
 	return qtrue;
 }
 
-void OGV_Reset(cin_cache* table)
+void OGV_Reset(int handle)
 {
-	if (!table) return;
-	ogv::activeTable = table;
+	if (ogv::tables && handle >= 0 && handle < 16)
+	{
+		ogv::activeTable = &ogv::tables[handle];
+		ogv::activeHandle = handle;
+	}
+	else return;
 
-	FS_FCloseFile(table->iFile);
-	FS_FOpenFileRead(table->fileName, &table->iFile, qtrue);
-	OGV_StartFile(table);
+	FS_FCloseFile(ogv::activeTable->iFile);
+	FS_FOpenFileRead(ogv::activeTable->fileName, &ogv::activeTable->iFile, qtrue);
+	OGV_StartFile(handle);
 	
-	table->status = FMV_LOOPED;
+	ogv::activeTable->status = FMV_LOOPED;
 }
 
 qboolean OGVInterrupt()
@@ -685,6 +710,8 @@ qboolean OGVInterrupt()
 	qboolean needVOutputData = qtrue;
 	qboolean audioWantsMoreData = qfalse;
 	int status;
+
+	auto& g_ogm = g_ogms[ogv::activeHandle];
 
 	// bad, should rewrite
 
@@ -719,54 +746,68 @@ qboolean OGVInterrupt()
 	return (qboolean)anyDataTransferred;
 }
 
-void OGV_ReadFrame(cin_cache* table, int timeNow)
+void OGV_ReadFrame(int handle, int timeNow)
 {
-	ogv::activeTable = table;
-
-	if (!table->startTime)
+	if (ogv::tables && handle >= 0 && handle < 16)
 	{
-		table->startTime = timeNow;
+		ogv::activeTable = &ogv::tables[handle];
+		ogv::activeHandle = handle;
+	}
+	else return;
+
+	auto& g_ogm = g_ogms[ogv::activeHandle];
+
+	if (!ogv::activeTable->startTime)
+	{
+		ogv::activeTable->startTime = timeNow;
 	}
 
-	g_ogm.currentTime = timeNow - table->startTime;
-	timeNow = timeNow - table->startTime + 20;
+	g_ogm.currentTime = timeNow - ogv::activeTable->startTime;
+	timeNow = timeNow - ogv::activeTable->startTime + 20;
 
-	table->dirty = qfalse;
+	ogv::activeTable->dirty = qfalse;
 
-	while ((!g_ogm.VFrameCount || timeNow >= (int)(g_ogm.VFrameCount * g_ogm.Vtime_unit / 10000)) && table->status == FMV_PLAY)
+	while ((!g_ogm.VFrameCount || timeNow >= (int)(g_ogm.VFrameCount * g_ogm.Vtime_unit / 10000)) && ogv::activeTable->status == FMV_PLAY)
 	{
-		table->dirty = qtrue;
+		ogv::activeTable->dirty = qtrue;
 		if (!OGVInterrupt())
 		{
 			// EOF reached
 			Com_DPrintf("eof reached\n");
-			if (table->holdAtEnd == qfalse) {
-				if (table->looping) {
-					OGV_Reset(table);
+			if (ogv::activeTable->holdAtEnd == qfalse) {
+				if (ogv::activeTable->looping) {
+					OGV_Reset(handle);
 				}
 				else {
-					table->status = FMV_EOF;
+					ogv::activeTable->status = FMV_EOF;
 				}
 			}
 			else {
-				table->status = FMV_IDLE;
+				ogv::activeTable->status = FMV_IDLE;
 			}
 		}
 	}
 }
 
-void OGV_StopVideo(cin_cache* table)
+void OGV_StopVideo(int handle)
 {
-	ogv::activeTable = table;
+	if (ogv::tables && handle >= 0 && handle < 16)
+	{
+		ogv::activeTable = &ogv::tables[handle];
+		ogv::activeHandle = handle;
+	}
+	else return;
+
+	auto& g_ogm = g_ogms[ogv::activeHandle];
 
 	// Probably should move it to cl_cin.cpp
 	if (ogv::cin_info.cin->linbuf) { Z_Free(ogv::cin_info.cin->linbuf); ogv::cin_info.cin->linbuf = NULL; ogv::cin_info.cin->linbufCapacity = 0; }
 
-	if (g_ogm.frameBufferTemp)
+	if (ogv::activeTable->frameBufferTemp)
 	{
-		Z_Free(g_ogm.frameBufferTemp);
-		g_ogm.frameBufferTemp = NULL;
-		g_ogm.frameBufferTempSize = 0;
+		Z_Free(ogv::activeTable->frameBufferTemp);
+		ogv::activeTable->frameBufferTemp = NULL;
+		ogv::activeTable->frameBufferTempSize = 0;
 	}
 
 	// Cleanup

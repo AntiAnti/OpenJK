@@ -71,7 +71,7 @@ static void CIN_StopVideo(cinematics_t* cin, cin_cache* table);
 extern qboolean S_FileExists(const char* psFilename);
 static unsigned short yuv_to_rgb(long y, long u, long v);
 static unsigned int yuv_to_rgb24(long y, long u, long v);
-cinVideoFormat ProcessVideoFileName(char* outFileName, int outSize, const char* inFileName);
+cinVideoFormat ProcessVideoFileName(char* outFileName, int outSize, const char* inFileName, qboolean bShader);
 
 static	long				ROQ_YY_tab[256];
 static	long				ROQ_UB_tab[256];
@@ -85,13 +85,13 @@ static	long				ROQ_VR_tab[256];
 * ================================================================
 */
 typedef struct {
-	void (*Init)(cin_interface shared_data, cin_cache* table);
+	void (*Init)(cin_interface shared_data, cin_cache* tables);
 	void (*Shutdown)();
-	qboolean(*Start)(cin_cache* table);
-	void (*ReadFrame)(cin_cache* table, int timeNow);
-	void (*ResetToStart)(cin_cache* table);
-	void (*Stop)(cin_cache* table);
-	qboolean(*DataFormatYUV)(); // qtrue if YUV, qfalse if RGB32
+	qboolean(*Start)(int handle);
+	void (*ReadFrame)(int handle, int timeNow);
+	void (*ResetToStart)(int handle);
+	void (*Stop)(int handle);
+	qboolean(*DataFormatYUV)(cin_cache* table); // qtrue if YUV, qfalse if RGB32
 } videoDecoder;
 
 static videoDecoder videoDecoders[] =
@@ -453,7 +453,7 @@ e_status CIN_RunCinematic (int handle)
 		currentHandle = handle;
 		cin.currentHandle = currentHandle;
 		cinTable[currentHandle].status = FMV_EOF;
-		videoDecoders[cinTable[currentHandle].videoFormat].ResetToStart(&cinTable[currentHandle]);
+		videoDecoders[cinTable[currentHandle].videoFormat].ResetToStart(currentHandle);
 	}
 
 	if (cinTable[handle].playonwalls < -1)
@@ -480,7 +480,7 @@ e_status CIN_RunCinematic (int handle)
 	cinTable[currentHandle].tfps = ((((Sys_Milliseconds()*com_timescale->value) - cinTable[currentHandle].startTime)*cinTable[currentHandle].roqFPS)/1000);
 
 	// process frame using active decoder
-	videoDecoders[cinTable[currentHandle].videoFormat].ReadFrame(&cinTable[currentHandle], thisTime);
+	videoDecoders[cinTable[currentHandle].videoFormat].ReadFrame(currentHandle, thisTime);
 
 	cinTable[currentHandle].lastTime = thisTime;
 
@@ -490,7 +490,7 @@ e_status CIN_RunCinematic (int handle)
 
 	if (cinTable[currentHandle].status == FMV_EOF) {
 		if (cinTable[currentHandle].looping) {
-			videoDecoders[cinTable[currentHandle].videoFormat].ResetToStart(&cinTable[currentHandle]);
+			videoDecoders[cinTable[currentHandle].videoFormat].ResetToStart(currentHandle);
 		} else {
 			CIN_StopVideo(&cin, &cinTable[currentHandle]);
 		}
@@ -513,7 +513,8 @@ int CIN_PlayCinematic( const char *arg, int x, int y, int w, int h, int systemBi
 	char	name[MAX_OSPATH];
 	int		i;
 
-	cinVideoFormat Format = ProcessVideoFileName(name, MAX_OSPATH, arg);
+	qboolean bShader = (qboolean)((systemBits & CIN_shader) != 0);
+	cinVideoFormat Format = ProcessVideoFileName(name, MAX_OSPATH, arg, bShader);
 
 	if (!(systemBits & CIN_system)) {
 		for ( i = 0 ; i < MAX_VIDEO_HANDLES ; i++ ) {
@@ -551,7 +552,7 @@ int CIN_PlayCinematic( const char *arg, int x, int y, int w, int h, int systemBi
 	cinTable[currentHandle].alterGameState = (qboolean)((systemBits & CIN_system) != 0);
 	cinTable[currentHandle].playonwalls = 1;
 	cinTable[currentHandle].silent = (qboolean)((systemBits & CIN_silent) != 0);
-	cinTable[currentHandle].shader = (qboolean)((systemBits & CIN_shader) != 0);
+	cinTable[currentHandle].shader = bShader;
 	if (psAudioFile)
 	{
 		cinTable[currentHandle].hSFX = S_RegisterSound(psAudioFile);
@@ -586,9 +587,10 @@ int CIN_PlayCinematic( const char *arg, int x, int y, int w, int h, int systemBi
 	cin_info.Audio_DecodeMonoToStereo = RllDecodeMonoToStereo;
 	cin_info.Audio_DecodeStereoToStereo = RllDecodeStereoToStereo;
 	cin_info.cin = &cin;
-	videoDecoders[Format].Init(cin_info, &cinTable[currentHandle]);
+	
+	videoDecoders[Format].Init(cin_info, cinTable);
 	// load video container header
-	if (videoDecoders[Format].Start(&cinTable[currentHandle]))
+	if (videoDecoders[Format].Start(currentHandle))
 	{
 		//RoQ_init();
 		cinTable[currentHandle].status = FMV_PLAY;
@@ -798,6 +800,13 @@ void CIN_DrawCinematic (int handle) {
 	h = cinTable[handle].height;
 	buf = cinTable[handle].buf;
 
+	
+	if (!cinTable[handle].dirty && cinTable[handle].holdAtEnd)
+	{
+		// always render "holdAtEnd" videos, even if it has no new frame
+		cinTable[handle].dirty = qtrue;
+	}
+
 	// Is video frame resampled to max texture size supported by videocard?
 	if (cinTable[handle].dirty && (cinTable[handle].CIN_WIDTH != cinTable[handle].drawX || cinTable[handle].CIN_HEIGHT != cinTable[handle].drawY)) {
 		if (cinTable[handle].drawX == 256 && cinTable[handle].drawY == 256)
@@ -813,7 +822,7 @@ void CIN_DrawCinematic (int handle) {
 		}
 		else // we have non-square video output (for example, 1080p)
 		{
-			if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV()) {
+			if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV(&cinTable[handle])) {
 				re.DrawStretchVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
 					cinTable[handle].bufY, cinTable[handle].bufU, cinTable[handle].bufV,
 					cinTable[handle].bufY_stride, cinTable[handle].bufUV_stride,
@@ -839,7 +848,7 @@ void CIN_DrawCinematic (int handle) {
 
 	if (cinTable[handle].dirty)
 	{
-		if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV()) {
+		if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV(&cinTable[handle])) {
 			// video decoder uses YUV420, and renderer supports it
 			re.DrawStretchVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
 				cinTable[handle].bufY, cinTable[handle].bufU, cinTable[handle].bufV, cinTable[handle].bufY_stride, cinTable[handle].bufUV_stride,
@@ -911,7 +920,7 @@ static void PlayCinematic(const char *arg, const char *s, qboolean qbInGame)
 
 	// Get file name from coded name (for example, [jk10] or [video/jk10] --> [video/jk10.roq)
 	char sTemp[1024], sShortFileName[1024];
-	cinVideoFormat Format = ProcessVideoFileName(sTemp, 1024, arg);
+	cinVideoFormat Format = ProcessVideoFileName(sTemp, 1024, arg, qfalse);
 	arg = &sTemp[0];
 
 	// If file exists
@@ -995,9 +1004,20 @@ static void PlayCinematic(const char *arg, const char *s, qboolean qbInGame)
 		// 
 		// Fix display ratio
 
-		const float VideoRatio = (float)SCREEN_HEIGHT / (float)SCREEN_WIDTH;
+		// While video header isn't loaded yet, we have need an assumption
+		// that OGV video has format 16:9 (while original ROQ videos are 4:3)
+		const float VideoRatio = (Format == cinVideoFormat::VIDEO_OGV)
+			? 1080.f / 1920.f
+			: (float)SCREEN_HEIGHT / (float)SCREEN_WIDTH;
+
 		float scrWidthOffs = ((float)cls.glconfig.vidWidth /* screen width */ - (float)cls.glconfig.vidHeight / VideoRatio /* desired width */) * 0.5f;
 		nScreenRatioFixOffset = (int)(scrWidthOffs * (float)SCREEN_WIDTH / (float)cls.glconfig.vidWidth);
+
+		if (!Q_stricmp(sShortFileName, "video/ja01"))
+		{
+			int i = 0;
+			i = 10;
+		}
 
 #if ASPECT_RATIO_FIX
 		if (ASPECT_RATIO_STRETCH_TO_HEIGHT /* stretch video to screen height */)
@@ -1257,19 +1277,28 @@ void CIN_UploadCinematic(int handle) {
 
 		// Resample video if needed
 		if (cinTable[handle].dirty && (cinTable[handle].CIN_WIDTH != cinTable[handle].drawX || cinTable[handle].CIN_HEIGHT != cinTable[handle].drawY)) {
-			int *buf2;
+			if (cinTable[handle].drawX == 256 && cinTable[handle].drawY == 256)
+			{
+				int* buf2;
+				buf2 = (int*)Z_Malloc(256 * 256 * 4, TAG_TEMP_WORKSPACE, qfalse);
 
-			buf2 = (int *)Z_Malloc(256*256*4, TAG_TEMP_WORKSPACE, qfalse);
+				CIN_ResampleCinematic(handle, buf2);
 
-			CIN_ResampleCinematic(handle, buf2);
-
-			re.UploadCinematic( 256, 256, (byte *)buf2, handle, qtrue);
-			cinTable[handle].dirty = qfalse;
-			Z_Free(buf2);
+				re.UploadCinematic(256, 256, (byte*)buf2, handle, qtrue);
+				cinTable[handle].dirty = qfalse;
+				Z_Free(buf2);
+			}
+			else
+			{
+				// Upload video at normal resolution
+				re.UploadCinematic(cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
+					cinTable[handle].buf, handle, cinTable[handle].dirty);
+				cinTable[handle].dirty = qfalse;
+			}
 		} else {
 			// Upload video at normal resolution
 			re.UploadCinematic( cinTable[handle].drawX, cinTable[handle].drawY,
-					cinTable[handle].buf, handle, cinTable[handle].dirty);
+				cinTable[handle].buf, handle, cinTable[handle].dirty);
 			cinTable[handle].dirty = qfalse;
 		}
 
@@ -1293,9 +1322,21 @@ qboolean CL_InGameCinematicOnStandBy(void)
 	return qbInGameCinematicOnStandBy;
 }
 
-cinVideoFormat ProcessVideoFileName(char* outFileName, int outSize, const char* inFileName)
+cinVideoFormat ProcessVideoFileName(char* outFileName, int outSize, const char* inFileName, qboolean bShader)
 {
 	cinVideoFormat Format = cinVideoFormat::VIDEO_ROQ;
+	/*
+	* for file name video/mycinematic or video/mycinematic.roq:
+	* if OGV isn't supported, use video/mycinematic.ROQ
+	* if OGV is supported:
+	*	a. GPU acceleration is supported (i. e. using rend2):
+	*		Try to find and load video/mycinematic.OGV,
+	*		if it isn't exist fall back to video/mycinematic.ROQ
+	*	b. GPU acceleration isn't supported (vanilla renderer):
+	*		At first try to find video/mycinematic_sd.OGV. If it
+	*		doesn't exist, use video/mycinematic.OGV. If it also
+	*		doesn't exist, use video/mycinematic.ROQ.
+	*/
 
 	if (strstr(inFileName, "/") == NULL && strstr(inFileName, "\\") == NULL) {
 		Com_sprintf(outFileName, outSize, "video/%s", inFileName);
@@ -1307,16 +1348,27 @@ cinVideoFormat ProcessVideoFileName(char* outFileName, int outSize, const char* 
 #ifdef DECODER_OGV
 	// Get file format
 	const char* extension = COM_GetExtension(outFileName);
-	// Cleanup existing extension, need to try ogv first
+	// Remove existing extension, need to try ogv first
 	if (strlen(extension) > 0) {
-		int n = strlen(outFileName) - 4;
-		outFileName[n] = 0;
+		outFileName[strlen(outFileName) - 4] = 0;
 	}
 
+	// if possible I want to play SD video instead of HD, if GPU acceleration isn't available
 	char name_ogv[MAX_OSPATH];
 	Q_strncpyz(name_ogv, outFileName, MAX_OSPATH);
-	COM_DefaultExtension(name_ogv, sizeof(name_ogv), ".ogv");
-	if (FS_FileIsInPAK(name_ogv) > 0) { //video\ja12.ogv // video/ja12.ogv
+
+	if (bShader || !videoDecoders[cinVideoFormat::VIDEO_OGV].DataFormatYUV(NULL)) {
+		Q_strcat(name_ogv, MAX_OSPATH, "_sd.ogv");
+		if (FS_FileIsInPAK(name_ogv) <= 0) {
+			Q_strncpyz(name_ogv, outFileName, MAX_OSPATH);
+			COM_DefaultExtension(name_ogv, sizeof(name_ogv), ".ogv");
+		}
+	}
+	else {
+		COM_DefaultExtension(name_ogv, sizeof(name_ogv), ".ogv");
+	}
+
+	if (FS_FileIsInPAK(name_ogv) > 0) {
 		Q_strncpyz(outFileName, name_ogv, MAX_OSPATH);
 		Format = cinVideoFormat::VIDEO_OGV;
 	}
@@ -1368,7 +1420,19 @@ static void CIN_StopVideo(cinematics_t* cin, cin_cache* table)
 	table->status = FMV_IDLE;
 	table->buf = NULL;
 
-	videoDecoders[table->videoFormat].Stop(table);
+	int handle = 0;
+	for (; handle < MAX_VIDEO_HANDLES; handle++)
+	{
+		if (!Q_stricmp(cinTable[handle].fileName, table->fileName))
+		{
+			videoDecoders[table->videoFormat].Stop(handle);
+			break;
+		}
+	}
+	if (handle == MAX_VIDEO_HANDLES)
+	{
+		videoDecoders[table->videoFormat].Stop(currentHandle);
+	}
 
 	if (table->iFile) {
 		FS_FCloseFile(table->iFile);

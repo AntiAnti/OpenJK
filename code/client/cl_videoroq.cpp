@@ -47,7 +47,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
  ////////////////////////////////////////////////////////////////
 
 static void RoQ_init(cin_cache* table);
-void RoQInterrupt(cin_cache* table);
+void RoQInterrupt(int handle);
 unsigned short				vq2[256 * 16 * 4];
 unsigned short				vq4[256 * 64 * 4];
 unsigned short				vq8[256 * 256 * 4];
@@ -55,6 +55,8 @@ extern int					s_soundtime;		// sample PAIRS
 
 namespace roq {
 	cin_interface			cin_info;
+	cin_cache*				tables;
+	// temp
 	cin_cache*				activeTable;
 	short					soundBufferTemp[32768];
 }
@@ -128,35 +130,35 @@ namespace roq {
 *
 ******************************************************************************/
 
-static void recurseQuad(long startX, long startY, long quadSize, long xOff, long yOff)
+static void recurseQuad(cin_cache* table, long startX, long startY, long quadSize, long xOff, long yOff)
 {
 	byte* scroff;
 	long bigx, bigy, lowx, lowy, useY;
 	long offset;
 
-	offset = roq::activeTable->screenDelta;
+	offset = table->screenDelta;
 
 	lowx = lowy = 0;
-	bigx = roq::activeTable->xsize;
-	bigy = roq::activeTable->ysize;
+	bigx = table->xsize;
+	bigy = table->ysize;
 
-	if (bigx > roq::activeTable->CIN_WIDTH) bigx = roq::activeTable->CIN_WIDTH;
-	if (bigy > roq::activeTable->CIN_HEIGHT) bigy = roq::activeTable->CIN_HEIGHT;
+	if (bigx > table->CIN_WIDTH) bigx = table->CIN_WIDTH;
+	if (bigy > table->CIN_HEIGHT) bigy = table->CIN_HEIGHT;
 
 	if ((startX >= lowx) && (startX + quadSize) <= (bigx) && (startY + quadSize) <= (bigy) && (startY >= lowy) && quadSize <= MAXSIZE) {
 		useY = startY;
-		scroff = roq::cin_info.cin->linbuf + (useY + ((roq::activeTable->CIN_HEIGHT - bigy) >> 1) + yOff) * (roq::activeTable->samplesPerLine) + (((startX + xOff)) * roq::activeTable->samplesPerPixel);
+		scroff = roq::cin_info.cin->linbuf + (useY + ((table->CIN_HEIGHT - bigy) >> 1) + yOff) * (table->samplesPerLine) + (((startX + xOff)) * table->samplesPerPixel);
 
-		roq::cin_info.cin->qStatus[0][roq::activeTable->onQuad] = scroff;
-		roq::cin_info.cin->qStatus[1][roq::activeTable->onQuad++] = scroff + offset;
+		roq::cin_info.cin->qStatus[0][table->onQuad] = scroff;
+		roq::cin_info.cin->qStatus[1][table->onQuad++] = scroff + offset;
 	}
 
 	if (quadSize != MINSIZE) {
 		quadSize >>= 1;
-		recurseQuad(startX, startY, quadSize, xOff, yOff);
-		recurseQuad(startX + quadSize, startY, quadSize, xOff, yOff);
-		recurseQuad(startX, startY + quadSize, quadSize, xOff, yOff);
-		recurseQuad(startX + quadSize, startY + quadSize, quadSize, xOff, yOff);
+		recurseQuad(table, startX, startY, quadSize, xOff, yOff);
+		recurseQuad(table, startX + quadSize, startY, quadSize, xOff, yOff);
+		recurseQuad(table, startX, startY + quadSize, quadSize, xOff, yOff);
+		recurseQuad(table, startX + quadSize, startY + quadSize, quadSize, xOff, yOff);
 	}
 }
 
@@ -169,25 +171,30 @@ static void recurseQuad(long startX, long startY, long quadSize, long xOff, long
 *
 ******************************************************************************/
 
-static void setupQuad(long xOff, long yOff)
+static void setupQuad(cin_cache* table, long xOff, long yOff)
 {
 	long numQuadCels, i, x, y;
 	byte* temp;
 
-	if (xOff == roq::cin_info.cin->oldXOff && yOff == roq::cin_info.cin->oldYOff && roq::activeTable->ysize == (unsigned)roq::cin_info.cin->oldysize && roq::activeTable->xsize == (unsigned)roq::cin_info.cin->oldxsize) {
+	if (xOff == roq::cin_info.cin->oldXOff
+		&& yOff == roq::cin_info.cin->oldYOff
+		&& table->ysize == (unsigned)roq::cin_info.cin->oldysize
+		&& table->xsize == (unsigned)roq::cin_info.cin->oldxsize
+		&& roq::cin_info.cin->qStatus[0]
+		&& roq::cin_info.cin->qStatus[1]) {
 		return;
 	}
 
 	roq::cin_info.cin->oldXOff = xOff;
 	roq::cin_info.cin->oldYOff = yOff;
-	roq::cin_info.cin->oldysize = roq::activeTable->ysize;
-	roq::cin_info.cin->oldxsize = roq::activeTable->xsize;
+	roq::cin_info.cin->oldysize = table->ysize;
+	roq::cin_info.cin->oldxsize = table->xsize;
 
-	numQuadCels = (roq::activeTable->xsize * roq::activeTable->ysize) / (16);
+	numQuadCels = (table->xsize * table->ysize) / (16);
 	numQuadCels += numQuadCels / 4;
 	numQuadCels += 64;							  // for overflow
 
-	roq::activeTable->onQuad = 0;
+	table->onQuad = 0;
 
 	// Reallocate qStatus arrays for arbitrary frame sizes
 	if (numQuadCels > roq::cin_info.cin->qStatusCapacity || !roq::cin_info.cin->qStatus[0] || !roq::cin_info.cin->qStatus[1])
@@ -199,9 +206,9 @@ static void setupQuad(long xOff, long yOff)
 		roq::cin_info.cin->qStatusCapacity = numQuadCels;
 	}
 
-	for (y = 0; y < (long)roq::activeTable->ysize; y += 16)
-		for (x = 0; x < (long)roq::activeTable->xsize; x += 16)
-			recurseQuad(x, y, 16, xOff, yOff);
+	for (y = 0; y < (long)table->ysize; y += 16)
+		for (x = 0; x < (long)table->xsize; x += 16)
+			recurseQuad(table, x, y, 16, xOff, yOff);
 
 	temp = NULL;
 
@@ -220,51 +227,51 @@ static void setupQuad(long xOff, long yOff)
 *
 ******************************************************************************/
 
-static void readQuadInfo(byte* qData)
+static void readQuadInfo(cin_cache* table, byte* qData)
 {
-	roq::activeTable->xsize = qData[0] + qData[1] * 256; //512
-	roq::activeTable->ysize = qData[2] + qData[3] * 256; //512
-	roq::activeTable->maxsize = qData[4] + qData[5] * 256; //8
-	roq::activeTable->minsize = qData[6] + qData[7] * 256; //4
+	table->xsize = qData[0] + qData[1] * 256; //512
+	table->ysize = qData[2] + qData[3] * 256; //512
+	table->maxsize = qData[4] + qData[5] * 256; //8
+	table->minsize = qData[6] + qData[7] * 256; //4
 
-	roq::activeTable->CIN_HEIGHT = roq::activeTable->ysize;
-	roq::activeTable->CIN_WIDTH = roq::activeTable->xsize;
+	table->CIN_HEIGHT = table->ysize;
+	table->CIN_WIDTH = table->xsize;
 
-	roq::activeTable->samplesPerLine = roq::activeTable->CIN_WIDTH * roq::activeTable->samplesPerPixel;
-	roq::activeTable->screenDelta = roq::activeTable->CIN_HEIGHT * roq::activeTable->samplesPerLine;
+	table->samplesPerLine = table->CIN_WIDTH * table->samplesPerPixel;
+	table->screenDelta = table->CIN_HEIGHT * table->samplesPerLine;
 
 	// Reallocate linbuf to fit arbitrary sizes
-	int twoFramesBufferSize = roq::activeTable->screenDelta * 2; // two frames
+	int twoFramesBufferSize = table->screenDelta * 2; // two frames
 	if (roq::cin_info.cin->linbufCapacity < twoFramesBufferSize || !roq::cin_info.cin->linbuf)
 	{
 		if (roq::cin_info.cin->linbuf) { Z_Free(roq::cin_info.cin->linbuf); roq::cin_info.cin->linbuf = NULL; roq::cin_info.cin->linbufCapacity = 0; }
 		roq::cin_info.cin->linbuf = (byte*)Z_Malloc(twoFramesBufferSize, TAG_TEMP_HUNKALLOC);
 		roq::cin_info.cin->linbufCapacity = twoFramesBufferSize;
 	}
-	roq::activeTable->buf = roq::cin_info.cin->linbuf + roq::activeTable->screenDelta;
+	table->buf = roq::cin_info.cin->linbuf + table->screenDelta;
 
-	roq::activeTable->half = qfalse;
-	roq::activeTable->smootheddouble = qfalse;
+	table->half = qfalse;
+	table->smootheddouble = qfalse;
 
-	roq::activeTable->VQ0 = roq::activeTable->VQNormal;
-	roq::activeTable->VQ1 = roq::activeTable->VQBuffer;
+	table->VQ0 = table->VQNormal;
+	table->VQ1 = table->VQBuffer;
 
-	roq::activeTable->t[0] = roq::activeTable->screenDelta;
-	roq::activeTable->t[1] = -roq::activeTable->screenDelta;
+	table->t[0] = table->screenDelta;
+	table->t[1] = -table->screenDelta;
 
-	roq::activeTable->drawX = _clamp(roq::activeTable->CIN_WIDTH, 1, cls.glconfig.maxTextureSize);
-	roq::activeTable->drawY = _clamp(roq::activeTable->CIN_HEIGHT, 1, cls.glconfig.maxTextureSize);
+	table->drawX = _clamp(table->CIN_WIDTH, 1, cls.glconfig.maxTextureSize);
+	table->drawY = _clamp(table->CIN_HEIGHT, 1, cls.glconfig.maxTextureSize);
 
 	// This safety check is completely unnecessary for all videocards since voodoo2
 	// Unless you try to feed the game a video with resolution higher than 16K
-	if (roq::activeTable->drawX != roq::activeTable->CIN_WIDTH || roq::activeTable->drawY != roq::activeTable->CIN_HEIGHT)
+	if (table->drawX != table->CIN_WIDTH || table->drawY != table->CIN_HEIGHT)
 	{
-		if (roq::activeTable->CIN_WIDTH != 256 || roq::activeTable->CIN_HEIGHT != 256) {
+		if (table->CIN_WIDTH != 256 || table->CIN_HEIGHT != 256) {
 			Com_Printf("HACK: approxmimating cinematic for Rage Pro or Voodoo\n");
 		}
 		// Just set to minimum, nah
-		roq::activeTable->drawX = 256;
-		roq::activeTable->drawY = 256;
+		table->drawX = 256;
+		table->drawY = 256;
 	}
 }
 
@@ -276,7 +283,7 @@ static void readQuadInfo(byte* qData)
 *
 ******************************************************************************/
 
-static void decodeCodeBook(byte* input, unsigned short roq_flags)
+static void decodeCodeBook(cin_cache* table, byte* input, unsigned short roq_flags)
 {
 	long	i, j, two, four;
 	unsigned short* aptr, * bptr, * cptr, * dptr;
@@ -300,12 +307,12 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 
 	bptr = (unsigned short*)vq2;
 
-	if (!roq::activeTable->half) {
-		if (!roq::activeTable->smootheddouble) {
+	if (!table->half) {
+		if (!table->smootheddouble) {
 			//
 			// normal height
 			//
-			if (roq::activeTable->samplesPerPixel == 2) {
+			if (table->samplesPerPixel == 2) {
 				for (i = 0; i < two; i++) {
 					y0 = (long)*input++;
 					y1 = (long)*input++;
@@ -329,7 +336,7 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 						VQ2TO4(aptr, bptr, cptr, dptr);
 				}
 			}
-			else if (roq::activeTable->samplesPerPixel == 4) {
+			else if (table->samplesPerPixel == 4) {
 				ibptr.s = bptr;
 				for (i = 0; i < two; i++) {
 					y0 = (long)*input++;
@@ -356,13 +363,13 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 						VQ2TO4(iaptr.i, ibptr.i, icptr.i, idptr.i);
 				}
 			}
-			else if (roq::activeTable->samplesPerPixel == 1) {
+			else if (table->samplesPerPixel == 1) {
 				bbptr = (byte*)bptr;
 				for (i = 0; i < two; i++) {
-					*bbptr++ = roq::activeTable->gray[*input++];
-					*bbptr++ = roq::activeTable->gray[*input++];
-					*bbptr++ = roq::activeTable->gray[*input++];
-					*bbptr++ = roq::activeTable->gray[*input]; input += 3;
+					*bbptr++ = table->gray[*input++];
+					*bbptr++ = table->gray[*input++];
+					*bbptr++ = table->gray[*input++];
+					*bbptr++ = table->gray[*input]; input += 3;
 				}
 
 				bcptr = (byte*)vq4;
@@ -380,7 +387,7 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 			//
 			// double height, smoothed
 			//
-			if (roq::activeTable->samplesPerPixel == 2) {
+			if (table->samplesPerPixel == 2) {
 				for (i = 0; i < two; i++) {
 					y0 = (long)*input++;
 					y1 = (long)*input++;
@@ -410,7 +417,7 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 					}
 				}
 			}
-			else if (roq::activeTable->samplesPerPixel == 4) {
+			else if (table->samplesPerPixel == 4) {
 				ibptr.s = bptr;
 				for (i = 0; i < two; i++) {
 					y0 = (long)*input++;
@@ -443,21 +450,21 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 					}
 				}
 			}
-			else if (roq::activeTable->samplesPerPixel == 1) {
+			else if (table->samplesPerPixel == 1) {
 				bbptr = (byte*)bptr;
 				for (i = 0; i < two; i++) {
 					y0 = (long)*input++;
 					y1 = (long)*input++;
 					y2 = (long)*input++;
 					y3 = (long)*input; input += 3;
-					*bbptr++ = roq::activeTable->gray[y0];
-					*bbptr++ = roq::activeTable->gray[y1];
-					*bbptr++ = roq::activeTable->gray[((y0 * 3) + y2) / 4];
-					*bbptr++ = roq::activeTable->gray[((y1 * 3) + y3) / 4];
-					*bbptr++ = roq::activeTable->gray[(y0 + (y2 * 3)) / 4];
-					*bbptr++ = roq::activeTable->gray[(y1 + (y3 * 3)) / 4];
-					*bbptr++ = roq::activeTable->gray[y2];
-					*bbptr++ = roq::activeTable->gray[y3];
+					*bbptr++ = table->gray[y0];
+					*bbptr++ = table->gray[y1];
+					*bbptr++ = table->gray[((y0 * 3) + y2) / 4];
+					*bbptr++ = table->gray[((y1 * 3) + y3) / 4];
+					*bbptr++ = table->gray[(y0 + (y2 * 3)) / 4];
+					*bbptr++ = table->gray[(y1 + (y3 * 3)) / 4];
+					*bbptr++ = table->gray[y2];
+					*bbptr++ = table->gray[y3];
 				}
 
 				bcptr = (byte*)vq4;
@@ -478,7 +485,7 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 		//
 		// 1/4 screen
 		//
-		if (roq::activeTable->samplesPerPixel == 2) {
+		if (table->samplesPerPixel == 2) {
 			for (i = 0; i < two; i++) {
 				y0 = (long)*input; input += 2;
 				y2 = (long)*input; input += 2;
@@ -499,12 +506,12 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 				}
 			}
 		}
-		else if (roq::activeTable->samplesPerPixel == 1) {
+		else if (table->samplesPerPixel == 1) {
 			bbptr = (byte*)bptr;
 
 			for (i = 0; i < two; i++) {
-				*bbptr++ = roq::activeTable->gray[*input]; input += 2;
-				*bbptr++ = roq::activeTable->gray[*input]; input += 4;
+				*bbptr++ = table->gray[*input]; input += 2;
+				*bbptr++ = table->gray[*input]; input += 4;
 			}
 
 			bcptr = (byte*)vq4;
@@ -518,7 +525,7 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 				}
 			}
 		}
-		else if (roq::activeTable->samplesPerPixel == 4) {
+		else if (table->samplesPerPixel == 4) {
 			ibptr.s = bptr;
 			for (i = 0; i < two; i++) {
 				y0 = (long)*input; input += 2;
@@ -790,16 +797,10 @@ static void RoQ_init(cin_cache* table)
 	}
 }
 
-void ROQ_InitSystem(cin_interface shared_data, cin_cache* table)
+void ROQ_InitSystem(cin_interface shared_data, cin_cache* tables)
 {
-	if (!table) return;
-	roq::activeTable = table;
-
 	roq::cin_info = shared_data;
-
-	table->VQNormal = (void (*)(byte*, void*))blitVQQuad32fs;
-	table->VQBuffer = (void (*)(byte*, void*))blitVQQuad32fs;
-	table->samplesPerPixel = 4;
+	roq::tables = tables;
 }
 
 void ROQ_Shutdown(void)
@@ -807,10 +808,19 @@ void ROQ_Shutdown(void)
 	// do nothing
 }
 
-qboolean ROQ_StartFile(cin_cache* table)
+qboolean ROQ_StartFile(int handle)
 {
-	roq::activeTable = table;
-	FS_Read(roq::cin_info.cin->file, 16, table->iFile);
+	if (roq::tables && handle >= 0 && handle < 16)
+	{
+		roq::activeTable = &roq::tables[handle];
+	}
+	else return qfalse;
+
+	roq::activeTable->VQNormal = (void (*)(byte*, void*))blitVQQuad32fs;
+	roq::activeTable->VQBuffer = (void (*)(byte*, void*))blitVQQuad32fs;
+	roq::activeTable->samplesPerPixel = 4;
+
+	FS_Read(roq::cin_info.cin->file, 16, roq::activeTable->iFile);
 
 	unsigned short RoQID = (roq::cin_info.cin->file[0]) | (roq::cin_info.cin->file[1] << 8);
 	if (RoQID != 0x1084) {
@@ -819,7 +829,7 @@ qboolean ROQ_StartFile(cin_cache* table)
 	}
 
 	// initialize struct
-	RoQ_init(table);
+	RoQ_init(roq::activeTable);
 	// read format data
 	/*
 	int counter = 0;
@@ -834,7 +844,7 @@ qboolean ROQ_StartFile(cin_cache* table)
 	//readQuadInfo(roq::cin_info.cin->file + 8);
 	//setupQuad(0, 0);
 
-	table->status = FMV_PLAY;
+	roq::activeTable->status = FMV_PLAY;
 	return qtrue;
 }
 
@@ -846,18 +856,21 @@ qboolean ROQ_StartFile(cin_cache* table)
 *
 ******************************************************************************/
 
-void ROQ_Reset(cin_cache* table) {
+void ROQ_Reset(int handle) {
 
-	if (!table) return;
-	roq::activeTable = table;
+	if (roq::tables && handle >= 0 && handle < 16)
+	{
+		roq::activeTable = &roq::tables[handle];
+	}
+	else return;
 
-	FS_FCloseFile(table->iFile);
-	FS_FOpenFileRead(table->fileName, &table->iFile, qtrue);
+	FS_FCloseFile(roq::activeTable->iFile);
+	FS_FOpenFileRead(roq::activeTable->fileName, &roq::activeTable->iFile, qtrue);
 	// let the background thread start reading ahead
-	FS_Read(roq::cin_info.cin->file, 16, table->iFile);
-	RoQ_init(table);
+	FS_Read(roq::cin_info.cin->file, 16, roq::activeTable->iFile);
+	RoQ_init(roq::activeTable);
 
-	table->status = FMV_LOOPED;
+	roq::activeTable->status = FMV_LOOPED;
 }
 
 
@@ -869,40 +882,43 @@ void ROQ_Reset(cin_cache* table) {
 *
 ******************************************************************************/
 
-void ROQ_ReadFrame(cin_cache* table, int thisTime)
+void ROQ_ReadFrame(int handle, int thisTime)
 {
-	int start = table->startTime;
-	while ((table->tfps != table->numQuads) && (table->status == FMV_PLAY))
+	if (roq::tables && handle >= 0 && handle < 16)
 	{
-		RoQInterrupt(table);
+		roq::activeTable = &roq::tables[handle];
+	}
+	else return;
 
-		if ((unsigned)start != table->startTime) {
-			table->tfps = ((((Sys_Milliseconds() * com_timescale->value) - table->startTime) * table->roqFPS) / 1000);
-			start = table->startTime;
+	int start = roq::activeTable->startTime;
+	while ((roq::activeTable->tfps != roq::activeTable->numQuads) && (roq::activeTable->status == FMV_PLAY))
+	{
+		RoQInterrupt(handle);
+
+		if ((unsigned)start != roq::activeTable->startTime) {
+			roq::activeTable->tfps = ((((Sys_Milliseconds() * com_timescale->value) - roq::activeTable->startTime) * roq::activeTable->roqFPS) / 1000);
+			start = roq::activeTable->startTime;
 		}
 	}
 }
 
-void RoQInterrupt(cin_cache* table)
+void RoQInterrupt(int handle)
 {
-	roq::activeTable = table;
 	byte* framedata;
 	int ssize;
 
-	if (!table) return;
-
-	FS_Read(roq::cin_info.cin->file, table->RoQFrameSize + 8, table->iFile);
-	if (table->RoQPlayed >= table->ROQSize) {
-		if (table->holdAtEnd == qfalse) {
-			if (table->looping) {
-				ROQ_Reset(table);
+	FS_Read(roq::cin_info.cin->file, roq::activeTable->RoQFrameSize + 8, roq::activeTable->iFile);
+	if (roq::activeTable->RoQPlayed >= roq::activeTable->ROQSize) {
+		if (roq::activeTable->holdAtEnd == qfalse) {
+			if (roq::activeTable->looping) {
+				ROQ_Reset(handle);
 			}
 			else {
-				table->status = FMV_EOF;
+				roq::activeTable->status = FMV_EOF;
 			}
 		}
 		else {
-			table->status = FMV_IDLE;
+			roq::activeTable->status = FMV_IDLE;
 		}
 		return;
 	}
@@ -912,123 +928,128 @@ void RoQInterrupt(cin_cache* table)
 	// new frame is ready
 	//
 redump:
-	switch (table->roq_id)
+	switch (roq::activeTable->roq_id)
 	{
 	case	ROQ_QUAD_VQ:
-		if ((table->numQuads & 1)) {
-			table->normalBuffer0 = table->t[1];
-			RoQPrepMcomp(table->roqF0, table->roqF1);
+		if ((roq::activeTable->numQuads & 1)) {
+			roq::activeTable->normalBuffer0 = roq::activeTable->t[1];
+			RoQPrepMcomp(roq::activeTable->roqF0, roq::activeTable->roqF1);
 			if (roq::cin_info.cin->qStatus[1]) // dirty, but works
 			{
-				table->VQ1((byte*)roq::cin_info.cin->qStatus[1], framedata);
+				roq::activeTable->VQ1((byte*)roq::cin_info.cin->qStatus[1], framedata);
 			}
-			table->buf = roq::cin_info.cin->linbuf + table->screenDelta;
+			roq::activeTable->buf = roq::cin_info.cin->linbuf + roq::activeTable->screenDelta;
 		}
 		else {
-			table->normalBuffer0 = table->t[0];
-			RoQPrepMcomp(table->roqF0, table->roqF1);
+			roq::activeTable->normalBuffer0 = roq::activeTable->t[0];
+			RoQPrepMcomp(roq::activeTable->roqF0, roq::activeTable->roqF1);
 			if (roq::cin_info.cin->qStatus[0]) // dirty, but works
 			{
-				table->VQ0((byte*)roq::cin_info.cin->qStatus[0], framedata);
+				roq::activeTable->VQ0((byte*)roq::cin_info.cin->qStatus[0], framedata);
 			}
-			table->buf = roq::cin_info.cin->linbuf;
+			roq::activeTable->buf = roq::cin_info.cin->linbuf;
 		}
-		if (table->numQuads == 0) {		// first frame
-			Com_Memcpy(roq::cin_info.cin->linbuf + table->screenDelta, roq::cin_info.cin->linbuf, table->samplesPerLine * table->ysize);
+		if (roq::activeTable->numQuads == 0) {		// first frame
+			Com_Memcpy(roq::cin_info.cin->linbuf + roq::activeTable->screenDelta, roq::cin_info.cin->linbuf, roq::activeTable->samplesPerLine * roq::activeTable->ysize);
 		}
-		table->numQuads++;
-		table->dirty = qtrue;
+		roq::activeTable->numQuads++;
+		roq::activeTable->dirty = qtrue;
 		break;
 	case	ROQ_CODEBOOK:
-		decodeCodeBook(framedata, (unsigned short)table->roq_flags);
+		decodeCodeBook(roq::activeTable, framedata, (unsigned short)roq::activeTable->roq_flags);
 		break;
 	case	ZA_SOUND_MONO:
-		if (!table->silent) {
-			ssize = roq::cin_info.Audio_DecodeMonoToStereo(framedata, roq::soundBufferTemp, table->RoQFrameSize, 0, (unsigned short)table->roq_flags);
+		if (!roq::activeTable->silent) {
+			ssize = roq::cin_info.Audio_DecodeMonoToStereo(framedata, roq::soundBufferTemp, roq::activeTable->RoQFrameSize, 0, (unsigned short)roq::activeTable->roq_flags);
 			S_RawSamples(ssize, 22050, 2, 1, (byte*)roq::soundBufferTemp, s_volume->value, qtrue);
 		}
 		break;
 	case	ZA_SOUND_STEREO:
-		if (!table->silent) {
-			if (table->numQuads == -1) {
+		if (!roq::activeTable->silent) {
+			if (roq::activeTable->numQuads == -1) {
 				S_Update();
 				s_rawend = s_soundtime;
 			}
-			ssize = roq::cin_info.Audio_DecodeStereoToStereo(framedata, roq::soundBufferTemp, table->RoQFrameSize, 0, (unsigned short)table->roq_flags);
+			ssize = roq::cin_info.Audio_DecodeStereoToStereo(framedata, roq::soundBufferTemp, roq::activeTable->RoQFrameSize, 0, (unsigned short)roq::activeTable->roq_flags);
 			S_RawSamples(ssize, 22050, 2, 2, (byte*)roq::soundBufferTemp, s_volume->value, qtrue);
 		}
 		break;
 	case	ROQ_QUAD_INFO:
-		if (table->numQuads == -1) {
-			readQuadInfo(framedata);
-			setupQuad(0, 0);
-			table->startTime = table->lastTime = Sys_Milliseconds() * com_timescale->value;
+		if (roq::activeTable->numQuads == -1) {
+			readQuadInfo(roq::activeTable, framedata);
+			setupQuad(roq::activeTable, 0, 0);
+			roq::activeTable->startTime = roq::activeTable->lastTime = Sys_Milliseconds() * com_timescale->value;
 		}
-		if (table->numQuads != 1) table->numQuads = 0;
+		if (roq::activeTable->numQuads != 1) roq::activeTable->numQuads = 0;
 		break;
 	case	ROQ_PACKET:
-		table->inMemory = (qboolean)table->roq_flags;
-		table->RoQFrameSize = 0;           // for header
+		roq::activeTable->inMemory = (qboolean)roq::activeTable->roq_flags;
+		roq::activeTable->RoQFrameSize = 0;           // for header
 		break;
 	case	ROQ_QUAD_HANG:
-		table->RoQFrameSize = 0;
+		roq::activeTable->RoQFrameSize = 0;
 		break;
 	case	ROQ_QUAD_JPEG:
 		break;
 	default:
-		table->status = FMV_EOF;
+		roq::activeTable->status = FMV_EOF;
 		break;
 	}
 	//
 	// read in next frame data
 	//
-	if (table->RoQPlayed >= table->ROQSize) {
-		if (table->holdAtEnd == qfalse) {
-			if (table->looping) {
-				ROQ_Reset(table);
+	if (roq::activeTable->RoQPlayed >= roq::activeTable->ROQSize) {
+		if (roq::activeTable->holdAtEnd == qfalse) {
+			if (roq::activeTable->looping) {
+				ROQ_Reset(handle);
 			}
 			else {
-				table->status = FMV_EOF;
+				roq::activeTable->status = FMV_EOF;
 			}
 		}
 		else {
-			table->status = FMV_IDLE;
+			roq::activeTable->status = FMV_IDLE;
 		}
 		return;
 	}
 
-	framedata += table->RoQFrameSize;
-	table->roq_id = framedata[0] + framedata[1] * 256;
-	table->RoQFrameSize = framedata[2] + framedata[3] * 256 + framedata[4] * 65536;
-	table->roq_flags = framedata[6] + framedata[7] * 256;
-	table->roqF0 = (signed char)framedata[7];
-	table->roqF1 = (signed char)framedata[6];
+	framedata += roq::activeTable->RoQFrameSize;
+	roq::activeTable->roq_id = framedata[0] + framedata[1] * 256;
+	roq::activeTable->RoQFrameSize = framedata[2] + framedata[3] * 256 + framedata[4] * 65536;
+	roq::activeTable->roq_flags = framedata[6] + framedata[7] * 256;
+	roq::activeTable->roqF0 = (signed char)framedata[7];
+	roq::activeTable->roqF1 = (signed char)framedata[6];
 
-	if (table->RoQFrameSize > MAX_ROQ_FRAME_SIZE || table->roq_id == 0x1084) {
+	if (roq::activeTable->RoQFrameSize > MAX_ROQ_FRAME_SIZE || roq::activeTable->roq_id == 0x1084) {
 		Com_DPrintf("roq_size>65536||roq_id==0x1084\n");
-		table->status = FMV_EOF;
-		if (table->looping) {
-			ROQ_Reset(table);
+		roq::activeTable->status = FMV_EOF;
+		if (roq::activeTable->looping) {
+			ROQ_Reset(handle);
 		}
 		return;
 	}
-	if (table->inMemory && (table->status != FMV_EOF))
+	if (roq::activeTable->inMemory && (roq::activeTable->status != FMV_EOF))
 	{
-		table->inMemory = (qboolean)(((int)table->inMemory) - 1);
+		roq::activeTable->inMemory = (qboolean)(((int)roq::activeTable->inMemory) - 1);
 		framedata += 8;
 		goto redump;
 	}
 	//
 	// one more frame hits the dust
 	//
-	//	assert(table->RoQFrameSize <= 65536);
-	//	r = FS_Read( roq::cin_info.cin->file, table->RoQFrameSize+8, table->iFile );
-	table->RoQPlayed += table->RoQFrameSize + 8;
+	//	assert(roq::activeTable->RoQFrameSize <= 65536);
+	//	r = FS_Read( roq::cin_info.cin->file, roq::activeTable->RoQFrameSize+8, roq::activeTable->iFile );
+	roq::activeTable->RoQPlayed += roq::activeTable->RoQFrameSize + 8;
 }
 
-void ROQ_StopVideo(cin_cache* table)
+void ROQ_StopVideo(int handle)
 {
-	roq::activeTable = table;
+	if (roq::tables && handle >= 0 && handle < 16)
+	{
+		roq::activeTable = &roq::tables[handle];
+	}
+	else return;
+
 	// Free dynamic cinematic buffers
 	if (roq::cin_info.cin->linbuf) { Z_Free(roq::cin_info.cin->linbuf); roq::cin_info.cin->linbuf = NULL; roq::cin_info.cin->linbufCapacity = 0; }
 	if (roq::cin_info.cin->qStatus[0]) { Z_Free(roq::cin_info.cin->qStatus[0]); roq::cin_info.cin->qStatus[0] = NULL; }
@@ -1036,7 +1057,7 @@ void ROQ_StopVideo(cin_cache* table)
 	roq::cin_info.cin->qStatusCapacity = 0;
 }
 
-qboolean ROQ_DataFormatYUV()
+qboolean ROQ_DataFormatYUV(cin_cache* table)
 {
 	return qfalse;
 }

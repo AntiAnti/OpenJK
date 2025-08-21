@@ -1723,6 +1723,12 @@ void RE_StretchVideoFrame(int x, int y, int w, int h,
 
 	qglFinish();
 
+	// limited only by size of the tr.scratchYUVTextures texture
+	int tex_max_width = tr.scratchYUVTextures[cinHandle][0]->width;
+	int tex_max_height = tr.scratchYUVTextures[cinHandle][0]->height;
+	if (cols > tex_max_width) cols = tex_max_width;
+	if (rows > tex_max_height) rows = tex_max_height;
+
 	// upload Y, U, V buffers into 2K/1K textures
 	{		
 		// --- alignment for buffers ---
@@ -1778,8 +1784,8 @@ void RE_StretchVideoFrame(int x, int y, int w, int h,
 	VectorSet4(quadVerts[3], x, y + h, 0.0f, 1.0f);
 
 	// texture coordinates
-	float u = (float)cols / 2048.0f;
-	float v = (float)rows / 2048.0f;
+	float u = (float)cols / tex_max_width;
+	float v = (float)rows / tex_max_height;
 	VectorSet2(texCoords[0], 0.0f, 0.0f);
 	VectorSet2(texCoords[1], u, 0.0f);
 	VectorSet2(texCoords[2], u, v);
