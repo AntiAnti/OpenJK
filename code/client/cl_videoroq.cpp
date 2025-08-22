@@ -46,8 +46,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
  ////////////////////////////////////////////////////////////////
 
-static void RoQ_init(cin_cache* table);
-void RoQInterrupt(int handle);
 unsigned short				vq2[256 * 16 * 4];
 unsigned short				vq4[256 * 64 * 4];
 unsigned short				vq8[256 * 256 * 4];
@@ -58,7 +56,6 @@ namespace roq {
 	cin_cache*				tables;
 	// temp
 	cin_cache*				activeTable;
-	short					soundBufferTemp[32768];
 }
 
 ////////////////////////////////////////////////////////////////
@@ -120,11 +117,17 @@ namespace roq {
 
 #define _clamp(value, vmin, vmax) (value > vmax ? vmax : (value < vmin ? vmin : value))
 
-////////////////////////////////////////////////////////////////
+// Some preferenitions
+static void RoQ_init(cin_cache* table);
+void RoQInterrupt(int handle);
+
+// ==========================================================================================================================
+// ==========================================================================================================================
+// ==========================================================================================================================
 
 /******************************************************************************
 *
-* Function:
+* Function: recurseQuad
 *
 * Description: ROQ
 *
@@ -165,7 +168,7 @@ static void recurseQuad(cin_cache* table, long startX, long startY, long quadSiz
 
 /******************************************************************************
 *
-* Function:
+* Function: setupQuad
 *
 * Description: ROQ
 *
@@ -221,7 +224,7 @@ static void setupQuad(cin_cache* table, long xOff, long yOff)
 
 /******************************************************************************
 *
-* Function:
+* Function: readQuadInfo
 *
 * Description: ROQ
 *
@@ -277,7 +280,7 @@ static void readQuadInfo(cin_cache* table, byte* qData)
 
 /******************************************************************************
 *
-* Function:
+* Function: decodeCodeBook
 *
 * Description:
 *
@@ -555,17 +558,13 @@ static void decodeCodeBook(cin_cache* table, byte* input, unsigned short roq_fla
 
 /******************************************************************************
 *
-* Function:
-*
-* Description: ROQ
+* Function: move8_32
 *
 ******************************************************************************/
 
 static void move8_32(byte* src, byte* dst, int spl)
 {
-	int i;
-
-	for (i = 0; i < 8; ++i)
+	for (int i = 0; i < 8; ++i)
 	{
 		memcpy(dst, src, 32);
 		src += spl;
@@ -575,17 +574,13 @@ static void move8_32(byte* src, byte* dst, int spl)
 
 /******************************************************************************
 *
-* Function:
-*
-* Description: ROQ
+* Function: move4_32
 *
 ******************************************************************************/
 
 static void move4_32(byte* src, byte* dst, int spl)
 {
-	int i;
-
-	for (i = 0; i < 4; ++i)
+	for (int i = 0; i < 4; ++i)
 	{
 		memcpy(dst, src, 16);
 		src += spl;
@@ -595,17 +590,13 @@ static void move4_32(byte* src, byte* dst, int spl)
 
 /******************************************************************************
 *
-* Function:
-*
-* Description: ROQ
+* Function: blit8_32
 *
 ******************************************************************************/
 
 static void blit8_32(byte* src, byte* dst, int spl)
 {
-	int i;
-
-	for (i = 0; i < 8; ++i)
+	for (int i = 0; i < 8; ++i)
 	{
 		memcpy(dst, src, 32);
 		src += 32;
@@ -615,17 +606,13 @@ static void blit8_32(byte* src, byte* dst, int spl)
 
 /******************************************************************************
 *
-* Function:
-*
-* Description: ROQ
+* Function: blit4_32
 *
 ******************************************************************************/
 
 static void blit4_32(byte* src, byte* dst, int spl)
 {
-	int i;
-
-	for (i = 0; i < 4; ++i)
+	for (int i = 0; i < 4; ++i)
 	{
 		memmove(dst, src, 16);
 		src += 16;
@@ -635,9 +622,7 @@ static void blit4_32(byte* src, byte* dst, int spl)
 
 /******************************************************************************
 *
-* Function:
-*
-* Description: ROQ
+* Function: blit2_32
 *
 ******************************************************************************/
 
@@ -649,9 +634,7 @@ static void blit2_32(byte* src, byte* dst, int spl)
 
 /******************************************************************************
 *
-* Function:
-*
-* Description: ROQ
+* Function: blitVQQuad32fs
 *
 ******************************************************************************/
 
@@ -739,9 +722,7 @@ static void blitVQQuad32fs(byte** status, unsigned char* data)
 
 /******************************************************************************
 *
-* Function:
-*
-* Description: ROQ
+* Function: RoQPrepMcomp
 *
 ******************************************************************************/
 
@@ -763,9 +744,9 @@ static void RoQPrepMcomp(long xoff, long yoff)
 
 /******************************************************************************
 *
-* Function:
+* Function: RoQ_init
 *
-* Description: ROQ
+* Description: initial RoQ setup
 *
 ******************************************************************************/
 
@@ -797,16 +778,38 @@ static void RoQ_init(cin_cache* table)
 	}
 }
 
+/******************************************************************************
+*
+* Function: ROQ_InitSystem
+*
+* Description: initialize references
+*
+******************************************************************************/
+
 void ROQ_InitSystem(cin_interface shared_data, cin_cache* tables)
 {
 	roq::cin_info = shared_data;
 	roq::tables = tables;
 }
 
+/******************************************************************************
+*
+* Function: ROQ_Shutdown
+*
+******************************************************************************/
+
 void ROQ_Shutdown(void)
 {
 	// do nothing
 }
+
+/******************************************************************************
+*
+* Function: ROQ_StartFile
+*
+* Description: start playing new file
+*
+******************************************************************************/
 
 qboolean ROQ_StartFile(int handle)
 {
@@ -826,6 +829,13 @@ qboolean ROQ_StartFile(int handle)
 	if (RoQID != 0x1084) {
 		Com_DPrintf("RoQDecoder: invalid RoQ ID\n");
 		return qfalse;
+	}
+
+	if (roq::activeTable->audioBufferCapacity < 32768)
+	{
+		if (roq::activeTable->audioBuffer) Z_Free(roq::activeTable->audioBuffer);
+		roq::activeTable->audioBufferCapacity = 32768;
+		roq::activeTable->audioBuffer = (short*)Z_Malloc(roq::activeTable->audioBufferCapacity * sizeof(short), TAG_TEMP_WORKSPACE);
 	}
 
 	// initialize struct
@@ -850,7 +860,7 @@ qboolean ROQ_StartFile(int handle)
 
 /******************************************************************************
 *
-* Function:
+* Function: ROQ_Reset
 *
 * Description: reset video to start when looping
 *
@@ -876,9 +886,9 @@ void ROQ_Reset(int handle) {
 
 /******************************************************************************
 *
-* Function: Process ROQ data frame
+* Function: ROQ_ReadFrame
 *
-* Description: ROQ
+* Description: Process ROQ file to read next data frame, if needed
 *
 ******************************************************************************/
 
@@ -901,6 +911,14 @@ void ROQ_ReadFrame(int handle, int thisTime)
 		}
 	}
 }
+
+/******************************************************************************
+*
+* Function: RoQInterrupt
+*
+* Description: Reading next RoQ frame
+*
+******************************************************************************/
 
 void RoQInterrupt(int handle)
 {
@@ -960,8 +978,8 @@ redump:
 		break;
 	case	ZA_SOUND_MONO:
 		if (!roq::activeTable->silent) {
-			ssize = roq::cin_info.Audio_DecodeMonoToStereo(framedata, roq::soundBufferTemp, roq::activeTable->RoQFrameSize, 0, (unsigned short)roq::activeTable->roq_flags);
-			S_RawSamples(ssize, 22050, 2, 1, (byte*)roq::soundBufferTemp, s_volume->value, qtrue);
+			ssize = roq::cin_info.Audio_DecodeMonoToStereo(framedata, roq::activeTable->audioBuffer, roq::activeTable->RoQFrameSize, 0, (unsigned short)roq::activeTable->roq_flags);
+			S_RawSamples(ssize, 22050, 2, 1, (byte*)roq::activeTable->audioBuffer, s_volume->value, qtrue);
 		}
 		break;
 	case	ZA_SOUND_STEREO:
@@ -970,8 +988,8 @@ redump:
 				S_Update();
 				s_rawend = s_soundtime;
 			}
-			ssize = roq::cin_info.Audio_DecodeStereoToStereo(framedata, roq::soundBufferTemp, roq::activeTable->RoQFrameSize, 0, (unsigned short)roq::activeTable->roq_flags);
-			S_RawSamples(ssize, 22050, 2, 2, (byte*)roq::soundBufferTemp, s_volume->value, qtrue);
+			ssize = roq::cin_info.Audio_DecodeStereoToStereo(framedata, roq::activeTable->audioBuffer, roq::activeTable->RoQFrameSize, 0, (unsigned short)roq::activeTable->roq_flags);
+			S_RawSamples(ssize, 22050, 2, 2, (byte*)roq::activeTable->audioBuffer, s_volume->value, qtrue);
 		}
 		break;
 	case	ROQ_QUAD_INFO:
@@ -1042,6 +1060,14 @@ redump:
 	roq::activeTable->RoQPlayed += roq::activeTable->RoQFrameSize + 8;
 }
 
+/******************************************************************************
+*
+* Function: ROQ_StopVideo
+*
+* Description: Stop active video
+*
+******************************************************************************/
+
 void ROQ_StopVideo(int handle)
 {
 	if (roq::tables && handle >= 0 && handle < 16)
@@ -1051,11 +1077,20 @@ void ROQ_StopVideo(int handle)
 	else return;
 
 	// Free dynamic cinematic buffers
+	// Should do it in cl_cin
 	if (roq::cin_info.cin->linbuf) { Z_Free(roq::cin_info.cin->linbuf); roq::cin_info.cin->linbuf = NULL; roq::cin_info.cin->linbufCapacity = 0; }
 	if (roq::cin_info.cin->qStatus[0]) { Z_Free(roq::cin_info.cin->qStatus[0]); roq::cin_info.cin->qStatus[0] = NULL; }
 	if (roq::cin_info.cin->qStatus[1]) { Z_Free(roq::cin_info.cin->qStatus[1]); roq::cin_info.cin->qStatus[1] = NULL; }
 	roq::cin_info.cin->qStatusCapacity = 0;
 }
+
+/******************************************************************************
+*
+* Function: ROQ_DataFormatYUV
+*
+* Description: We don't need any additional processing of RoQ video frame
+*
+******************************************************************************/
 
 qboolean ROQ_DataFormatYUV(cin_cache* table)
 {

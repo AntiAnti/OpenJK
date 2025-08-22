@@ -1700,11 +1700,13 @@ Stretches a raw 24-bit YUV-420 image up to 2048x2048 size over the given screen 
 Used for cinematics.
 =============
 */
-void RE_StretchVideoFrame(int x, int y, int w, int h,
-	int cols, int rows,
-	const byte* planeY, const byte* planeU, const byte* planeV,
-	int y_stride, int uv_stride,
-	int cinHandle, qboolean dirty) {
+void RE_StretchVideoFrame(
+		int x, int y, int w, int h,
+		int cols, int rows,
+		const byte* planeY, const byte* planeU, const byte* planeV,
+		int y_stride, int uv_stride,
+		int cinHandle, qboolean dirty)
+{
 	vec4_t quadVerts[4];
 	vec2_t texCoords[4];
 

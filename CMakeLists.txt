@@ -72,7 +72,7 @@ set(UseInternalSDL2Default   OFF)
 # Anti2
 # add bundled OGG video projects
 #
-set(UseInternalOGGVideo      OFF)
+set(UseInternalOGGVideo      ON)
 
 if(UseInternalLibs OR WIN32)
   set(UseInternalOpenALDefault ON)

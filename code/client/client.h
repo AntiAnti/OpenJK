@@ -409,18 +409,23 @@ void	SCR_PrecacheScreenshot();
 #define MAX_ROQ_FRAME_SIZE	(unsigned int)(BASE_ROQ_FRAME_SIZE * 4)
 
 typedef struct {
-	byte*				linbuf = NULL; // allocate dynamically for two frames, depending on CIN_WIDTH and CIN_HEIGHT
-	byte				file[MAX_ROQ_FRAME_SIZE]; // @TODO: allocate dynamically to support resolution higher than 2K
-	short				sqrTable[256];
-
-	int					mcomp[256];
-	byte**				qStatus[2] = { NULL, NULL }; // allocate dynamically
+	// @TODO: no need to keep linbuf here anymore; should move it to cin_cache
+	byte*				linbuf = NULL; // allocated dynamically for two frames
 	int					linbufCapacity = 0;
+
+	byte				file[MAX_ROQ_FRAME_SIZE]; // buffer to read file
+	short				sqrTable[256];
+	int					mcomp[256];
+
+	byte**				qStatus[2] = { NULL, NULL }; // allocated dynamically
 	int					qStatusCapacity = 0;
 
-	long				oldXOff, oldYOff, oldysize, oldxsize;
+	long				oldXOff;
+	long				oldYOff;
+	long				oldysize;
+	long				oldxsize;
 
-	int					currentHandle;
+	int					currentHandle = -1;
 } cinematics_t;
 
 typedef struct {
@@ -442,40 +447,37 @@ typedef enum
 #ifdef DECODER_OGV
 	VIDEO_OGV = 1,
 #endif
-#ifdef DECODER_X256
-	VIDEO_X256
-#endif
 	MAX
 } cinVideoFormat;
 
-// complete mess, need refactoring
+// complete mess, need to refactor
 typedef struct {
 	char				fileName[MAX_OSPATH];
-	int					CIN_WIDTH, CIN_HEIGHT;
+	int					CIN_WIDTH, CIN_HEIGHT; // actual frame size of input video (ex. 1920x1080)
 	int					xpos, ypos, width, height;
 	qboolean			looping, holdAtEnd, dirty, alterGameState, silent, shader;
-	cinVideoFormat		videoFormat;
-	fileHandle_t		iFile = NULL;	// 0 = none
+	cinVideoFormat		videoFormat; // ogv or roq
+	fileHandle_t		iFile = NULL; // Video file handle to read data
 	e_status			status;
 	unsigned int		startTime;
 	unsigned int		lastTime;
 	long				tfps;
-	long				RoQPlayed;
+	long				RoQPlayed; // @TODO: move to roq child struct
 	long				ROQSize;
 	unsigned int		RoQFrameSize;
 	long				onQuad;
 	long				numQuads;
 	long				samplesPerLine;
 	unsigned int		roq_id;
-	long				screenDelta;
+	long				screenDelta; // size in bytes of one image to draw
 
-	void				(*VQ0)(byte* status, void* qdata);
+	void				(*VQ0)(byte* status, void* qdata); // @TODO: move to videoroq
 	void				(*VQ1)(byte* status, void* qdata);
 	void				(*VQNormal)(byte* status, void* qdata);
 	void				(*VQBuffer)(byte* status, void* qdata);
 
-	long        		samplesPerPixel = 4;
-	byte* gray;
+	long        		samplesPerPixel = 4; // RGBA8888
+	byte*				gray;
 	unsigned int		xsize, ysize, maxsize, minsize;
 
 	qboolean			half, smootheddouble, inMemory;
@@ -486,22 +488,26 @@ typedef struct {
 	long				t[2];
 	long				roqFPS;
 	int					playonwalls;
-	byte*				buf = NULL;
-	long				drawX, drawY;
-
-	// Pointers (not actual buffers) to raw decompressed data
-	// Used only for OGV and rend2
-	byte*				bufY = NULL;
-	byte*				bufU = NULL;
-	byte*				bufV = NULL;
-	int					bufY_stride = 0;
-	int					bufUV_stride = 0;
-
 	sfxHandle_t			hSFX = NULL;	// 0 = none
 	qhandle_t			hCRAWLTEXT = NULL;	// 0 = none
 
-	// processing video frame, only for OGV
-	byte*				frameBufferTemp = NULL;	// used in BlitFrameToTexture frameBufferTemp[2048 * 2048 * 4];
+	byte*				buf = NULL; // pointer to the next frame in cinematics_t::linbuf
+	long				drawX, drawY; // size of texture (for example, 2048x2048 for 1920x1080 video), but for roq always equals to CIN_WIDTH, CIN_HEIGHT
+
+	// YUV420 decompressed image. Pointers to cin_ogv_t::yuv_buffers, used only in OGV
+	byte*				bufY = NULL;
+	byte*				bufU = NULL;
+	byte*				bufV = NULL;
+	int					bufY_stride = 0; // stride for bufY
+	int					bufUV_stride = 0; // texture size (for example, 2048x2048 for 1920x1080 video)
+
+	// Actual buffer to store audio data, allocated by decoder and freed by CIN_StopVideo (the same way it should work for linbuf)
+	short*				audioBuffer;
+	int					audioBufferCapacity = 0;
+
+	// buffer to process decoded video frame, only for OGV
+	// although shouldn't be used in most cases at all
+	byte*				frameBufferTemp = NULL;	// used in BlitFrameToTexture
 	int					frameBufferTempSize = 0;
 } cin_cache;
 

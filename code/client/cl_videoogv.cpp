@@ -60,53 +60,48 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // ogg, theora, vorbis state
 typedef struct
 {
-	ogg_sync_state			sync_state;		// sync incoming bitstream
-	ogg_stream_state		stream_audio;	// audio stream
-	ogg_stream_state		stream_video;	// video stream
+	ogg_sync_state			sync_state;			// sync incoming bitstream
+	ogg_stream_state		stream_audio;		// audio stream
+	ogg_stream_state		stream_video;		// video stream
 
-	vorbis_dsp_state		v_decoder;		// central working state for the packet->PCM decoder
-	vorbis_info				v_info;			// struct that stores all the static vorbis bitstream settings
-	vorbis_comment			v_comment;		// struct that stores all the bitstream user comments
+	vorbis_dsp_state		v_decoder;			// central working state for the packet->PCM decoder
+	vorbis_info				v_info;				// struct that stores all the static vorbis bitstream settings
+	vorbis_comment			v_comment;			// struct that stores all the bitstream user comments
 
-	theora_state			th_state;		// dump_video.c(example decoder): td
-	theora_info				th_info;        // dump_video.c(example decoder): ti
-	theora_comment			th_comment;		// dump_video.c(example decoder): tc
-	yuv_buffer				th_yuvbuffer;	// YUV buffer for video frame
+	theora_state			th_state;			// dump_video.c(example decoder): td
+	theora_info				th_info;		   // dump_video.c(example decoder): ti
+	theora_comment			th_comment;			// dump_video.c(example decoder): tc
+	yuv_buffer				th_yuvbuffer;		// YUV buffer for video frame
 
-	ogg_int64_t				VFrameCount;	// output video-stream
+	ogg_int64_t				VFrameCount;		// output video-stream
 	ogg_int64_t				Vtime_unit;
-	int						currentTime;	// input from Run-function
+	int						currentTime;		// input from Run-function
 
-	// decoded audio dataaudio 
-	short					audioBuffer[SIZEOF_RAWBUFF * 2];
-	ogg_int64_t				audioQueuedPairs;		// audio samples pushed to mixed
-	int						audioStartTime = 0;		// in ms
+	// decoded audio data
+	ogg_int64_t				audioQueuedPairs;	// audio samples pushed to mixed
 } cin_ogv_t;
 
-cin_ogv_t					g_ogms[16];		// OGV data
-extern int					s_soundtime;	// sample PAIRS
-//alignas(16) uint8_t		YUVa[3840 * 2160 * 4]; // 4K buffer for one frame YUV-RGB converstion
+cin_ogv_t					g_ogms[16];			// OGV data
+extern int					s_soundtime;		// sample PAIRS
 
 namespace ogv {
 	cin_interface			cin_info;
 	cin_cache*				tables;
-	cin_cache*				activeTable;
-	int						activeHandle = -1; // only valid in helper functions called by interface functions
+	cin_cache*				activeTable;		// only valid in helper functions called by interface functions
+	int						activeHandle = -1;	// only valid in helper functions called by interface functions
 }
 
-// predefinitions
+// Some predefinitions
 qboolean OGV_LoadBlockToSync();
 int OGV_LoadPagesToStreams();
 int OGV_LoadVideoFrame();
-qboolean OGV_LoadAudio();
-// I'd really, really want to move YUV processing to renderer
-void yuv420_to_argb8888(uint8_t* yp, uint8_t* up, uint8_t* vp,
-	uint32_t sy, uint32_t suv,
-	int width, int height,
-	uint32_t* rgb, uint32_t srgb);
-//static void OGV_YUV2ARGB(const byte* yuv, int width, int height, byte* rgba_out);
+qboolean OGV_LoadAudio(cin_cache* table);
+// Convert YUV420 to RGB32 using x86 SSE2 optimization (Written by Nils Liaaen Corneliusen, 2012)
+void yuv420_to_argb8888(uint8_t* yp, uint8_t* up, uint8_t* vp, uint32_t sy, uint32_t suv, int width, int height, uint32_t* rgb, uint32_t srgb);
 
-//=============================================================
+// ==========================================================================================================================
+// ==========================================================================================================================
+// ==========================================================================================================================
 
 void BlitFrameToTexture(const uint8_t* src, int video_w, int video_h, uint8_t* dst, int tex_w, int tex_h, int bpp = 4 /* byte per fixel */)
 {
@@ -143,10 +138,10 @@ void OGV_BlitFrameToTexture(int frameWidth, int frameHeight)
 		return;
 	}
 
-	unsigned long totalOffsetBytes = (ogv::activeTable->drawX * bpp) * (frameHeight - 1);
-	unsigned long totalInFrameSizeBytes = frameWidth * frameHeight * bpp;
-	unsigned long newLineSize = ogv::activeTable->drawX * bpp;
-	unsigned long oldLineSize = frameWidth * bpp;
+	long totalOffsetBytes = (ogv::activeTable->drawX * bpp) * (frameHeight - 1);
+	long totalInFrameSizeBytes = frameWidth * frameHeight * bpp;
+	long newLineSize = ogv::activeTable->drawX * bpp;
+	long oldLineSize = frameWidth * bpp;
 
 	if (totalInFrameSizeBytes < totalOffsetBytes)
 	{
@@ -176,7 +171,9 @@ void OGV_BlitFrameToTexture(int frameWidth, int frameHeight)
 
 qboolean OGV_DataFormatYUV(cin_cache* table)
 {
+	// We DON'T process on GPU video rendered to texture (see CIN_UploadCinematic)
 	if (table && table->shader) return qfalse;
+	// We can process on GPU video if we use rend2
 	return (qboolean)(Q_stristr(cl_renderer->string, "rend2") != NULL);
 }
 
@@ -221,7 +218,7 @@ int OGV_LoadVideoFrame()
 			if (OGV_DataFormatYUV(ogv::activeTable)) {
 				// rend2: let's process video frame on GPU
 
-				// i'll better hope offsets are zero
+				// let's hope offsets are zero
 				//ogg_uint32_t offset_x = g_ogm.th_info.offset_x;
 				//ogg_uint32_t offset_y = g_ogm.th_info.offset_y;
 
@@ -286,7 +283,7 @@ static inline int AudioBufferedMs()
 *
 ******************************************************************************/
 
-qboolean OGV_LoadAudio()
+qboolean OGV_LoadAudio(cin_cache* table)
 {
 	qboolean couldObtainSomeData = qtrue;
 	float** pcm; // 32-bit data???
@@ -298,9 +295,10 @@ qboolean OGV_LoadAudio()
 
 	if (!g_ogm.stream_audio.serialno)
 	{
+		// don't have audio stream
 		return qfalse;
 	}
-	if (ogv::activeTable->silent)
+	if (table->silent)
 	{
 		// don't need audio
 		return qfalse;
@@ -329,7 +327,7 @@ qboolean OGV_LoadAudio()
 			}
 
 			// convert 32bit audio to 16bit 
-			short* ptr = (short*)g_ogm.audioBuffer;
+			short* ptr = table->audioBuffer;
 			for (int i = 0; i < frameNeeded; i++)
 			{
 				for (int j = 0; j < g_ogm.v_info.channels; j++)
@@ -349,10 +347,9 @@ qboolean OGV_LoadAudio()
 			if (g_ogm.audioQueuedPairs == 0) {
 				S_Update();
 				s_rawend = s_soundtime;
-				g_ogm.audioStartTime = s_soundtime;
 			}
 
-			S_RawSamples(frameNeeded, (int)g_ogm.v_info.rate, OGG_PCM_SAMPLEWIDTH, g_ogm.v_info.channels, (byte*)g_ogm.audioBuffer, s_volume->value, qtrue);
+			S_RawSamples(frameNeeded, (int)g_ogm.v_info.rate, OGG_PCM_SAMPLEWIDTH, g_ogm.v_info.channels, (byte*)table->audioBuffer, s_volume->value, qtrue);
 			g_ogm.audioQueuedPairs += frameNeeded;
 
 			// tell libvorbis how many samples we actually consumed (we ate them all!)
@@ -376,7 +373,6 @@ qboolean OGV_LoadAudio()
 	vorbis_block_clear(&vb);
 
 	return (qboolean)(g_ogm.currentTime + MIN_AUDIO_PRELOAD > (int)(g_ogm.v_decoder.granulepos * 1000 / g_ogm.v_info.rate));
-	//return (qboolean)(AudioBufferedMs() < MIN_AUDIO_PRELOAD);
 }
 
 /******************************************************************************
@@ -459,13 +455,27 @@ int OGV_LoadPagesToStreams()
 	return r;
 }
 
-//===================================================================================
+/******************************************************************************
+*
+* Function: OGV_InitSystem
+*
+* Description: Initialize references to cl_cin
+*
+******************************************************************************/
 
 void OGV_InitSystem(cin_interface shared_data, cin_cache* tables)
 {
 	ogv::cin_info = shared_data;
 	ogv::tables = tables;
 }
+
+/******************************************************************************
+*
+* Function: OGV_Shutdown
+*
+* Description: 
+*
+******************************************************************************/
 
 void OGV_Shutdown(void)
 {
@@ -494,10 +504,11 @@ qboolean OGV_StartFile(int handle)
 	else return qfalse;
 
 	auto& g_ogm = g_ogms[handle];
+	cin_cache* activeTable = &ogv::tables[handle];
 
-	ogv::activeTable->numQuads = -1;
-	ogv::activeTable->RoQPlayed = 0;
-	//FS_Read(ogv::cin_info.cin->file, 16, table->iFile);
+	activeTable->numQuads = -1;
+	activeTable->RoQPlayed = 0;
+
 	memset(&g_ogm, 0, sizeof(cin_ogv_t));
 	
 	ogg_sync_init(&g_ogm.sync_state);
@@ -606,87 +617,101 @@ qboolean OGV_StartFile(int handle)
 	// init table
 	g_ogm.Vtime_unit = ((ogg_int64_t)g_ogm.th_info.fps_denominator * 1000 * 10000 / g_ogm.th_info.fps_numerator);
 
-	ogv::activeTable->startTime = ogv::activeTable->lastTime = Sys_Milliseconds() * com_timescale->value;
+	activeTable->startTime = activeTable->lastTime = Sys_Milliseconds() * com_timescale->value;
 
 	/*	get frame rate */
-	ogv::activeTable->roqFPS = (g_ogm.th_info.fps_denominator > 0)
+	activeTable->roqFPS = (g_ogm.th_info.fps_denominator > 0)
 		? (long)((double)g_ogm.th_info.fps_numerator / (double)g_ogm.th_info.fps_denominator)
 		: 30;
 
-	if (ogv::activeTable->hSFX)
+	if (activeTable->hSFX)
 	{
-		S_StartLocalSound(ogv::activeTable->hSFX, CHAN_AUTO);
+		S_StartLocalSound(activeTable->hSFX, CHAN_AUTO);
 	}
 
 	g_ogm.audioQueuedPairs = 0;
-	g_ogm.audioStartTime = s_soundtime;
-	ogv::activeTable->xsize = ogv::activeTable->drawX = g_ogm.th_info.frame_width;
-	ogv::activeTable->ysize = ogv::activeTable->drawY = g_ogm.th_info.frame_height;
-	ogv::activeTable->CIN_WIDTH = ogv::activeTable->xsize;
-	ogv::activeTable->CIN_HEIGHT = ogv::activeTable->ysize;
+	activeTable->xsize = activeTable->drawX = g_ogm.th_info.frame_width;
+	activeTable->ysize = activeTable->drawY = g_ogm.th_info.frame_height;
+	activeTable->CIN_WIDTH = activeTable->xsize;
+	activeTable->CIN_HEIGHT = activeTable->ysize;
 
 	// We support now non-square video, but texture size must be in powers of two
 	bool bInitW = true, bInitH = true;
 	for (int texture_size = 64; texture_size <= cls.glconfig.maxTextureSize; texture_size *= 2)
 	{
-		if (bInitW && texture_size >= ogv::activeTable->CIN_WIDTH) {
-			ogv::activeTable->drawX = texture_size; bInitW = false;
+		if (bInitW && texture_size >= activeTable->CIN_WIDTH) {
+			activeTable->drawX = texture_size; bInitW = false;
 		}
-		if (bInitH && texture_size >= ogv::activeTable->CIN_HEIGHT) {
-			ogv::activeTable->drawY = texture_size; bInitH = false;
+		if (bInitH && texture_size >= activeTable->CIN_HEIGHT) {
+			activeTable->drawY = texture_size; bInitH = false;
 		}
 		if (!bInitW && !bInitH) break;
 	}
 
-	ogv::activeTable->samplesPerLine = ogv::activeTable->drawX * ogv::activeTable->samplesPerPixel;
-	ogv::activeTable->screenDelta = ogv::activeTable->drawY * ogv::activeTable->samplesPerLine;
+	activeTable->samplesPerLine = activeTable->drawX * activeTable->samplesPerPixel;
+	activeTable->screenDelta = activeTable->drawY * activeTable->samplesPerLine;
 
 	// Reallocate linbuf to fit arbitrary sizes
-	int twoFramesBufferSize = ogv::activeTable->screenDelta * 2; // two frames
+	int twoFramesBufferSize = activeTable->screenDelta * 2; // two frames
 	if (ogv::cin_info.cin->linbufCapacity < twoFramesBufferSize || !ogv::cin_info.cin->linbuf)
 	{
 		if (ogv::cin_info.cin->linbuf) { Z_Free(ogv::cin_info.cin->linbuf); ogv::cin_info.cin->linbuf = NULL; ogv::cin_info.cin->linbufCapacity = 0; }
 		ogv::cin_info.cin->linbuf = (byte*)Z_Malloc(twoFramesBufferSize, TAG_TEMP_HUNKALLOC);
 		ogv::cin_info.cin->linbufCapacity = twoFramesBufferSize;
 	}
-	ogv::activeTable->buf = ogv::cin_info.cin->linbuf + ogv::activeTable->screenDelta;
+	activeTable->buf = ogv::cin_info.cin->linbuf + activeTable->screenDelta;
 
-	ogv::activeTable->half = qfalse;
-	ogv::activeTable->smootheddouble = qfalse;
+	activeTable->half = qfalse;
+	activeTable->smootheddouble = qfalse;
 
-	ogv::activeTable->t[0] = ogv::activeTable->screenDelta;
-	ogv::activeTable->t[1] = -ogv::activeTable->screenDelta;
+	activeTable->t[0] = activeTable->screenDelta;
+	activeTable->t[1] = -activeTable->screenDelta;
 
 	// This safety check is completely unnecessary for all videocards since voodoo2
 	// Unless you try to feed the game a video with resolution higher than 16K
-	ogv::activeTable->drawX = _clamp(ogv::activeTable->drawX, 1, cls.glconfig.maxTextureSize);
-	ogv::activeTable->drawY = _clamp(ogv::activeTable->drawY, 1, cls.glconfig.maxTextureSize);
-	if (_texture_frame_mismatch(ogv::activeTable))
+	activeTable->drawX = _clamp(activeTable->drawX, 1, cls.glconfig.maxTextureSize);
+	activeTable->drawY = _clamp(activeTable->drawY, 1, cls.glconfig.maxTextureSize);
+	if (_texture_frame_mismatch(activeTable))
 	{
-		if (ogv::activeTable->CIN_WIDTH != 256 || ogv::activeTable->CIN_HEIGHT != 256) {
+		if (activeTable->CIN_WIDTH != 256 || activeTable->CIN_HEIGHT != 256) {
 			Com_Printf("HACK: approxmimating cinematic for Rage Pro or Voodoo\n");
 		}
 
 		// prepare temp buffer for BlitFrameToTexture
-		long totalOffsetBytes = (ogv::activeTable->drawX * ogv::activeTable->samplesPerPixel) * (ogv::activeTable->CIN_HEIGHT - 1);
-		long totalInFrameSizeBytes = (ogv::activeTable->CIN_WIDTH + 16 /* keep pad for alignment */) * ogv::activeTable->CIN_HEIGHT * ogv::activeTable->samplesPerPixel;
+		long totalOffsetBytes = (activeTable->drawX * activeTable->samplesPerPixel) * (activeTable->CIN_HEIGHT - 1);
+		long totalInFrameSizeBytes = (activeTable->CIN_WIDTH + 16 /* keep pad for alignment */) * activeTable->CIN_HEIGHT * activeTable->samplesPerPixel;
 		// do we even need a buffer to copy frame
 		if (totalInFrameSizeBytes < totalOffsetBytes)
 		{
 			long expectedTempBufferSize = totalInFrameSizeBytes;
-			if (ogv::activeTable->frameBufferTempSize < expectedTempBufferSize)
+			if (activeTable->frameBufferTempSize < expectedTempBufferSize)
 			{
-				if (ogv::activeTable->frameBufferTemp) Z_Free(ogv::activeTable->frameBufferTemp);
-				ogv::activeTable->frameBufferTemp = (byte*)Z_Malloc(ogv::activeTable->frameBufferTempSize, TAG_TEMP_HUNKALLOC);
-				ogv::activeTable->frameBufferTempSize = expectedTempBufferSize;
+				if (activeTable->frameBufferTemp) Z_Free(activeTable->frameBufferTemp);
+				activeTable->frameBufferTemp = (byte*)Z_Malloc(activeTable->frameBufferTempSize, TAG_TEMP_HUNKALLOC);
+				activeTable->frameBufferTempSize = expectedTempBufferSize;
 			}
 		}
 	}
 
-	ogv::activeTable->status = FMV_PLAY;
+	if (activeTable->audioBufferCapacity < SIZEOF_RAWBUFF * 2)
+	{
+		if (activeTable->audioBuffer) Z_Free(activeTable->audioBuffer);
+		activeTable->audioBufferCapacity = SIZEOF_RAWBUFF * 2;
+		activeTable->audioBuffer = (short*)Z_Malloc(activeTable->audioBufferCapacity*sizeof(short), TAG_TEMP_WORKSPACE);
+	}
+
+	activeTable->status = FMV_PLAY;
 
 	return qtrue;
 }
+
+/******************************************************************************
+*
+* Function: OGV_Reset
+*
+* Description: Restart video (used for looping)
+*
+******************************************************************************/
 
 void OGV_Reset(int handle)
 {
@@ -704,7 +729,7 @@ void OGV_Reset(int handle)
 	ogv::activeTable->status = FMV_LOOPED;
 }
 
-qboolean OGVInterrupt()
+qboolean OGVInterrupt(cin_cache* table)
 {
 	bool anyDataTransferred = true;
 	qboolean needVOutputData = qtrue;
@@ -739,12 +764,20 @@ qboolean OGVInterrupt()
 		// load all Audio after loading new pages ...
 		if (g_ogm.VFrameCount > 0)  // wait some videoframes (it's better to have some delay, than a laggy sound)
 		{
-			audioWantsMoreData = OGV_LoadAudio();
+			audioWantsMoreData = OGV_LoadAudio(table);
 		}
 	}
 
 	return (qboolean)anyDataTransferred;
 }
+
+/******************************************************************************
+*
+* Function: OGV_ReadFrame
+*
+* Description: Read next frame if needed
+*
+******************************************************************************/
 
 void OGV_ReadFrame(int handle, int timeNow)
 {
@@ -756,38 +789,47 @@ void OGV_ReadFrame(int handle, int timeNow)
 	else return;
 
 	auto& g_ogm = g_ogms[ogv::activeHandle];
+	cin_cache* table = &ogv::tables[handle];
 
-	if (!ogv::activeTable->startTime)
+	if (!table->startTime)
 	{
-		ogv::activeTable->startTime = timeNow;
+		table->startTime = timeNow;
 	}
 
-	g_ogm.currentTime = timeNow - ogv::activeTable->startTime;
-	timeNow = timeNow - ogv::activeTable->startTime + 20;
+	g_ogm.currentTime = timeNow - table->startTime;
+	timeNow = timeNow - table->startTime + 20;
 
-	ogv::activeTable->dirty = qfalse;
+	table->dirty = qfalse;
 
-	while ((!g_ogm.VFrameCount || timeNow >= (int)(g_ogm.VFrameCount * g_ogm.Vtime_unit / 10000)) && ogv::activeTable->status == FMV_PLAY)
+	while ((!g_ogm.VFrameCount || timeNow >= (int)(g_ogm.VFrameCount * g_ogm.Vtime_unit / 10000)) && table->status == FMV_PLAY)
 	{
-		ogv::activeTable->dirty = qtrue;
-		if (!OGVInterrupt())
+		table->dirty = qtrue;
+		if (!OGVInterrupt(table))
 		{
 			// EOF reached
 			Com_DPrintf("eof reached\n");
-			if (ogv::activeTable->holdAtEnd == qfalse) {
-				if (ogv::activeTable->looping) {
+			if (table->holdAtEnd == qfalse) {
+				if (table->looping) {
 					OGV_Reset(handle);
 				}
 				else {
-					ogv::activeTable->status = FMV_EOF;
+					table->status = FMV_EOF;
 				}
 			}
 			else {
-				ogv::activeTable->status = FMV_IDLE;
+				table->status = FMV_IDLE;
 			}
 		}
 	}
 }
+
+/******************************************************************************
+*
+* Function: OGV_StopVideo
+*
+* Description: stop playing video
+*
+******************************************************************************/
 
 void OGV_StopVideo(int handle)
 {
@@ -800,7 +842,7 @@ void OGV_StopVideo(int handle)
 
 	auto& g_ogm = g_ogms[ogv::activeHandle];
 
-	// Probably should move it to cl_cin.cpp
+	// Should move it to cl_cin.cpp
 	if (ogv::cin_info.cin->linbuf) { Z_Free(ogv::cin_info.cin->linbuf); ogv::cin_info.cin->linbuf = NULL; ogv::cin_info.cin->linbufCapacity = 0; }
 
 	if (ogv::activeTable->frameBufferTemp)
@@ -822,7 +864,7 @@ void OGV_StopVideo(int handle)
 	ogg_sync_clear(&g_ogm.sync_state);
 }
 
-// YUV to RGB SSE2
+// YUV to RGB with SSE2
 // Written by Nils Liaaen Corneliusen 2012.
 // License: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication license
 // https://www.ignorantus.com

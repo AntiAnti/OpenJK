@@ -1006,9 +1006,13 @@ static void PlayCinematic(const char *arg, const char *s, qboolean qbInGame)
 
 		// While video header isn't loaded yet, we have need an assumption
 		// that OGV video has format 16:9 (while original ROQ videos are 4:3)
+#ifdef DECODER_OGV
 		const float VideoRatio = (Format == cinVideoFormat::VIDEO_OGV)
 			? 1080.f / 1920.f
 			: (float)SCREEN_HEIGHT / (float)SCREEN_WIDTH;
+#else
+		const float VideoRatio = (float)SCREEN_HEIGHT / (float)SCREEN_WIDTH;
+#endif
 
 		float scrWidthOffs = ((float)cls.glconfig.vidWidth /* screen width */ - (float)cls.glconfig.vidHeight / VideoRatio /* desired width */) * 0.5f;
 		nScreenRatioFixOffset = (int)(scrWidthOffs * (float)SCREEN_WIDTH / (float)cls.glconfig.vidWidth);
@@ -1432,6 +1436,13 @@ static void CIN_StopVideo(cinematics_t* cin, cin_cache* table)
 	if (handle == MAX_VIDEO_HANDLES)
 	{
 		videoDecoders[table->videoFormat].Stop(currentHandle);
+	}
+	// Free audio buffer
+	if (table->audioBuffer)
+	{
+		Z_Free(table->audioBuffer);
+		table->audioBuffer = NULL;
+		table->audioBufferCapacity = 0;
 	}
 
 	if (table->iFile) {

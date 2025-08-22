@@ -7,7 +7,7 @@ This is my attempt to improve quality of cinematics in JA SP. Two formats are su
 >
 > Decoding of one frame takes ~5 ms, but for heavy frames it may go to 10-11 ms. We also need to convert YUV420 data to RGBA (add 4-5 ms on x86/64 CPU with SSE2 optimization) and 4-5 ms to blit this 16:9 image into square 2048x2048 texture. As you can see, I'm in safe with 20 ms at max, but user with weaker CPU can lose "heavy" frames. Fortunately, everything after frame decoding can be done on GPU.
 >
-> Conclusion: you're completely safe with vanilla renderer and 720p video. For 1080p it's not strictly necessary, but better to use rend2. 2K video also can work fine with rend2 - I get 10-15 ms per frame with rend2.
+> Conclusion: you're completely safe with vanilla renderer and 720p video. For 1080p it's not strictly necessary, but better to use rend2. 2K video also can work fine with rend2 - I get 10-15 ms per frame.
 
 OGV libraries (**ogg** itself, **theora** video decoder and **vorbis** audio decoder) are included as bundled projects and (hopefully) should compile for Linux. There is UseInternalOGGVideo flag in the CMakeLists. Disable it to build the project without OGV support (but you still get 1k and 2k RoQ).
 
