@@ -85,7 +85,7 @@ cin_ogv_t					g_ogms[16];			// OGV data
 extern int					s_soundtime;		// sample PAIRS
 
 namespace ogv {
-	cin_interface			cin_info;
+	cinematics_t*			cin;
 	cin_cache*				tables;
 	cin_cache*				activeTable;		// only valid in helper functions called by interface functions
 	int						activeHandle = -1;	// only valid in helper functions called by interface functions
@@ -169,10 +169,10 @@ void OGV_BlitFrameToTexture(int frameWidth, int frameHeight)
 	}
 }
 
-qboolean OGV_DataFormatYUV(cin_cache* table)
+qboolean OGV_DataFormatYUV()
 {
 	// We DON'T process on GPU video rendered to texture (see CIN_UploadCinematic)
-	if (table && table->shader) return qfalse;
+	//if (table && table->shader) return qfalse;
 	// We can process on GPU video if we use rend2
 	return (qboolean)(Q_stristr(cl_renderer->string, "rend2") != NULL);
 }
@@ -206,16 +206,16 @@ int OGV_LoadVideoFrame()
 
 			// buffer for rgb
 			if (ogv::activeTable->numQuads & 1)
-				ogv::activeTable->buf = ogv::cin_info.cin->linbuf + ogv::activeTable->screenDelta;
+				ogv::activeTable->buf = ogv::cin->linbuf + ogv::activeTable->screenDelta;
 			else
-				ogv::activeTable->buf = ogv::cin_info.cin->linbuf;
+				ogv::activeTable->buf = ogv::cin->linbuf;
 			byte* out = ogv::activeTable->buf;
 
 			int thisTimeB = Sys_Milliseconds();
 			int thisTimeC = thisTimeB;
 
 			yuv_buffer* yuv = &g_ogm.th_yuvbuffer;
-			if (OGV_DataFormatYUV(ogv::activeTable)) {
+			if (OGV_DataFormatYUV() && !ogv::activeTable->shader) {
 				// rend2: let's process video frame on GPU
 
 				// let's hope offsets are zero
@@ -463,9 +463,9 @@ int OGV_LoadPagesToStreams()
 *
 ******************************************************************************/
 
-void OGV_InitSystem(cin_interface shared_data, cin_cache* tables)
+void OGV_InitSystem(cinematics_t* cin_ptr, cin_cache* tables)
 {
-	ogv::cin_info = shared_data;
+	ogv::cin = cin_ptr;
 	ogv::tables = tables;
 }
 
@@ -653,13 +653,13 @@ qboolean OGV_StartFile(int handle)
 
 	// Reallocate linbuf to fit arbitrary sizes
 	int twoFramesBufferSize = activeTable->screenDelta * 2; // two frames
-	if (ogv::cin_info.cin->linbufCapacity < twoFramesBufferSize || !ogv::cin_info.cin->linbuf)
+	if (ogv::cin->linbufCapacity < twoFramesBufferSize || !ogv::cin->linbuf)
 	{
-		if (ogv::cin_info.cin->linbuf) { Z_Free(ogv::cin_info.cin->linbuf); ogv::cin_info.cin->linbuf = NULL; ogv::cin_info.cin->linbufCapacity = 0; }
-		ogv::cin_info.cin->linbuf = (byte*)Z_Malloc(twoFramesBufferSize, TAG_TEMP_HUNKALLOC);
-		ogv::cin_info.cin->linbufCapacity = twoFramesBufferSize;
+		if (ogv::cin->linbuf) { Z_Free(ogv::cin->linbuf); ogv::cin->linbuf = NULL; ogv::cin->linbufCapacity = 0; }
+		ogv::cin->linbuf = (byte*)Z_Malloc(twoFramesBufferSize, TAG_TEMP_HUNKALLOC);
+		ogv::cin->linbufCapacity = twoFramesBufferSize;
 	}
-	activeTable->buf = ogv::cin_info.cin->linbuf + activeTable->screenDelta;
+	activeTable->buf = ogv::cin->linbuf + activeTable->screenDelta;
 
 	activeTable->half = qfalse;
 	activeTable->smootheddouble = qfalse;
@@ -838,12 +838,8 @@ void OGV_StopVideo(int handle)
 		ogv::activeTable = &ogv::tables[handle];
 		ogv::activeHandle = handle;
 	}
-	else return;
 
 	auto& g_ogm = g_ogms[ogv::activeHandle];
-
-	// Should move it to cl_cin.cpp
-	if (ogv::cin_info.cin->linbuf) { Z_Free(ogv::cin_info.cin->linbuf); ogv::cin_info.cin->linbuf = NULL; ogv::cin_info.cin->linbufCapacity = 0; }
 
 	if (ogv::activeTable->frameBufferTemp)
 	{
@@ -851,6 +847,8 @@ void OGV_StopVideo(int handle)
 		ogv::activeTable->frameBufferTemp = NULL;
 		ogv::activeTable->frameBufferTempSize = 0;
 	}
+
+	ogv::activeTable->bufU = ogv::activeTable->bufV = ogv::activeTable->bufY = NULL;
 
 	// Cleanup
 	theora_clear(&g_ogm.th_state);

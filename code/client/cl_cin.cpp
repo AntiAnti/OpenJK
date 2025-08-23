@@ -73,25 +73,19 @@ static unsigned short yuv_to_rgb(long y, long u, long v);
 static unsigned int yuv_to_rgb24(long y, long u, long v);
 cinVideoFormat ProcessVideoFileName(char* outFileName, int outSize, const char* inFileName, qboolean bShader);
 
-static	long				ROQ_YY_tab[256];
-static	long				ROQ_UB_tab[256];
-static	long				ROQ_UG_tab[256];
-static	long				ROQ_VG_tab[256];
-static	long				ROQ_VR_tab[256];
-
 /*
 * ================================================================
 * Decoder interface
 * ================================================================
 */
 typedef struct {
-	void (*Init)(cin_interface shared_data, cin_cache* tables);
+	void (*Init)(cinematics_t* cin_ptr, cin_cache* tables);
 	void (*Shutdown)();
 	qboolean(*Start)(int handle);
 	void (*ReadFrame)(int handle, int timeNow);
 	void (*ResetToStart)(int handle);
 	void (*Stop)(int handle);
-	qboolean(*DataFormatYUV)(cin_cache* table); // qtrue if YUV, qfalse if RGB32
+	qboolean(*DataFormatYUV)(); // qtrue if YUV, qfalse if RGB32
 } videoDecoder;
 
 static videoDecoder videoDecoders[] =
@@ -147,7 +141,33 @@ static int CIN_HandleForVideo(void) {
 }
 
 
+/******************************************************************************
+*
+* Function:
+*
+* Description: shared
+*
+******************************************************************************/
 
+static void ROQ_GenYUVTables(void)
+{
+	float t_ub, t_vr, t_ug, t_vg;
+	long i;
+
+	t_ub = (1.77200f / 2.0f) * (float)(1 << 6) + 0.5f;
+	t_vr = (1.40200f / 2.0f) * (float)(1 << 6) + 0.5f;
+	t_ug = (0.34414f / 2.0f) * (float)(1 << 6) + 0.5f;
+	t_vg = (0.71414f / 2.0f) * (float)(1 << 6) + 0.5f;
+	for (i = 0; i < 256; i++) {
+		float x = (float)(2 * i - 255);
+
+		cin.ROQ_UB_tab[i] = (long)((t_ub * x) + (1 << 5));
+		cin.ROQ_VR_tab[i] = (long)((t_vr * x) + (1 << 5));
+		cin.ROQ_UG_tab[i] = (long)((-t_ug * x));
+		cin.ROQ_VG_tab[i] = (long)((-t_vg * x) + (1 << 5));
+		cin.ROQ_YY_tab[i] = (long)((i << 6) | (i >> 2));
+	}
+}
 
 //-----------------------------------------------------------------------------
 // RllSetupTable
@@ -167,108 +187,6 @@ static void RllSetupTable( void )
 		cin.sqrTable[z+128] = (short)(-cin.sqrTable[z]);
 	}
 }
-
-//-----------------------------------------------------------------------------
-// RllDecodeMonoToMono
-//
-// Decode mono source data into a mono buffer.
-//
-// Parameters:	from -> buffer holding encoded data
-//				to ->	buffer to hold decoded data
-//				size =	number of bytes of input (= # of shorts of output)
-//				signedOutput = 0 for unsigned output, non-zero for signed output
-//				flag = flags from asset header
-//
-// Returns:		Number of samples placed in output buffer
-//-----------------------------------------------------------------------------
-/*
-static long RllDecodeMonoToMono(unsigned char *from,short *to,unsigned int size,char signedOutput ,unsigned short flag)
-{
-	unsigned int z;
-	int prev;
-
-	if (signedOutput)
-		prev =  flag - 0x8000;
-	else
-		prev = flag;
-
-	for (z=0;z<size;z++) {
-		prev = to[z] = (short)(prev + cin.sqrTable[from[z]]);
-	}
-	return size;	//*sizeof(short));
-}
-*/
-
-//-----------------------------------------------------------------------------
-// RllDecodeMonoToStereo
-//
-// Shared function. Decode mono source data [8bit] into a stereo buffer [16bit].
-// Output is 4 times the number of bytes in the input.
-//
-// Parameters:	from -> buffer holding encoded data
-//				to ->	buffer to hold decoded data
-//				size =	number of bytes of input (= 1/4 # of bytes of output)
-//				signedOutput = 0 for unsigned output, non-zero for signed output
-//				flag = flags from asset header
-//
-// Returns:		Number of samples placed in output buffer
-//-----------------------------------------------------------------------------
-static long RllDecodeMonoToStereo(unsigned char *from,short *to,unsigned int size,char signedOutput,unsigned short flag)
-{
-	unsigned int z;
-	int prev;
-
-	if (signedOutput)
-		prev =  flag - 0x8000;
-	else
-		prev = flag;
-
-	for (z = 0; z < size; z++) {
-		prev = (short)(prev + cin.sqrTable[from[z]]);
-		to[z*2+0] = to[z*2+1] = (short)(prev);
-	}
-
-	return size;	// framesNum=[in]size * [channels]=2 * [sizeof(short)]=2;
-}
-
-
-//-----------------------------------------------------------------------------
-// RllDecodeStereoToStereo
-//
-// Shared function. Decode stereo source data [8bit] into a stereo buffer [16bit].
-//
-// Parameters:	from -> buffer holding encoded data
-//				to ->	buffer to hold decoded data
-//				size =	number of bytes of input (= 1/2 # of bytes of output)
-//				signedOutput = 0 for unsigned output, non-zero for signed output
-//				flag = flags from asset header
-//
-// Returns:		Number of samples placed in output buffer
-//-----------------------------------------------------------------------------
-static long RllDecodeStereoToStereo(unsigned char *from,short *to,unsigned int size,char signedOutput, unsigned short flag)
-{
-	unsigned int z;
-	unsigned char *zz = from;
-	int	prevL, prevR;
-
-	if (signedOutput) { // -32767..32767
-		prevL = (flag & 0xff00) - 0x8000;
-		prevR = ((flag & 0x00ff) << 8) - 0x8000;
-	} else { // 0..65535
-		prevL = flag & 0xff00;
-		prevR = (flag & 0x00ff) << 8;
-	}
-
-	for (z=0;z<size;z+=2) {
-                prevL = (short)(prevL + cin.sqrTable[*zz++]);
-                prevR = (short)(prevR + cin.sqrTable[*zz++]);
-                to[z+0] = (short)(prevL);
-                to[z+1] = (short)(prevR);
-	}
-
-	return (size>>1);	//*sizeof(short));
-}
-
 
 //-----------------------------------------------------------------------------
 // RllDecodeStereoToMono
@@ -311,87 +229,13 @@ static long RllDecodeStereoToMono(unsigned char *from,short *to,unsigned int siz
 *
 * Function:
 *
-* Description: shared
+* Description: Globally initialize ROQ
 *
 ******************************************************************************/
 
-static void ROQ_GenYUVTables( void )
+static void InitYUVTables(void)
 {
-	float t_ub,t_vr,t_ug,t_vg;
-	long i;
-
-	t_ub = (1.77200f/2.0f) * (float)(1<<6) + 0.5f;
-	t_vr = (1.40200f/2.0f) * (float)(1<<6) + 0.5f;
-	t_ug = (0.34414f/2.0f) * (float)(1<<6) + 0.5f;
-	t_vg = (0.71414f/2.0f) * (float)(1<<6) + 0.5f;
-	for(i=0;i<256;i++) {
-		float x = (float)(2 * i - 255);
-
-		ROQ_UB_tab[i] = (long)( ( t_ub * x) + (1<<5));
-		ROQ_VR_tab[i] = (long)( ( t_vr * x) + (1<<5));
-		ROQ_UG_tab[i] = (long)( (-t_ug * x)		 );
-		ROQ_VG_tab[i] = (long)( (-t_vg * x) + (1<<5));
-		ROQ_YY_tab[i] = (long)( (i << 6) | (i >> 2) );
-	}
-}
-
-/******************************************************************************
-*
-* Function: YUV to RGB pixel
-*
-* Description: shared
-*
-******************************************************************************/
-
-static unsigned short yuv_to_rgb( long y, long u, long v )
-{
-	long r,g,b,YY = (long)(ROQ_YY_tab[(y)]);
-
-	r = (YY + ROQ_VR_tab[v]) >> 9;
-	g = (YY + ROQ_UG_tab[u] + ROQ_VG_tab[v]) >> 8;
-	b = (YY + ROQ_UB_tab[u]) >> 9;
-
-	r = _clamp(r, 0, 31);
-	g = _clamp(g, 0, 63);
-	b = _clamp(b, 0, 31);
-
-	return (unsigned short)((r<<11)+(g<<5)+(b));
-}
-
-/******************************************************************************
-*
-* Function: YUV to RGB pixel
-*
-* Description: shared
-*
-******************************************************************************/
-
-static unsigned int yuv_to_rgb24( long y, long u, long v )
-{
-	long r,g,b,YY = (long)(ROQ_YY_tab[(y)]);
-
-	r = (YY + ROQ_VR_tab[v]) >> 6;
-	g = (YY + ROQ_UG_tab[u] + ROQ_VG_tab[v]) >> 6;
-	b = (YY + ROQ_UB_tab[u]) >> 6;
-
-	r = _clamp(r, 0, 255);
-	g = _clamp(g, 0, 255);
-	b = _clamp(b, 0, 255);
-
-	return LittleLong ((r)|(g<<8)|(b<<16)|(255<<24));
-}
-
-/******************************************************************************
-*
-* Function:
-*
-* Description: Globally initialize ROQ 
-*
-******************************************************************************/
-
-static void InitYUVTables( void )
-{
-	// NOT ROQ
+	// Currently used only for ROQ
 	ROQ_GenYUVTables();
 	RllSetupTable();
 }
@@ -499,8 +343,8 @@ e_status CIN_RunCinematic (int handle)
 	return cinTable[currentHandle].status;
 }
 
-void		Menus_CloseAll(void);
-void		UI_Cursor_Show(qboolean flag);
+void Menus_CloseAll(void);
+void UI_Cursor_Show(qboolean flag);
 
 /*
 ==================
@@ -581,14 +425,7 @@ int CIN_PlayCinematic( const char *arg, int x, int y, int w, int h, int systemBi
 	// Ensure shared tables are initialzed
 	InitYUVTables();
 	// Ensure decoder is initialized
-	cin_interface cin_info;
-	cin_info.yuv2rgb = yuv_to_rgb;
-	cin_info.yuv2rgb24 = yuv_to_rgb24;
-	cin_info.Audio_DecodeMonoToStereo = RllDecodeMonoToStereo;
-	cin_info.Audio_DecodeStereoToStereo = RllDecodeStereoToStereo;
-	cin_info.cin = &cin;
-	
-	videoDecoders[Format].Init(cin_info, cinTable);
+	videoDecoders[Format].Init(&cin, cinTable);
 	// load video container header
 	if (videoDecoders[Format].Start(currentHandle))
 	{
@@ -822,7 +659,8 @@ void CIN_DrawCinematic (int handle) {
 		}
 		else // we have non-square video output (for example, 1080p)
 		{
-			if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV(&cinTable[handle])) {
+			// Use hardware acceleration?
+			if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV() && !cinTable[handle].shader) {
 				re.DrawStretchVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
 					cinTable[handle].bufY, cinTable[handle].bufU, cinTable[handle].bufV,
 					cinTable[handle].bufY_stride, cinTable[handle].bufUV_stride,
@@ -848,7 +686,7 @@ void CIN_DrawCinematic (int handle) {
 
 	if (cinTable[handle].dirty)
 	{
-		if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV(&cinTable[handle])) {
+		if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV() && !cinTable[handle].shader) {
 			// video decoder uses YUV420, and renderer supports it
 			re.DrawStretchVideoFrame(x, y, w, h, cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT,
 				cinTable[handle].bufY, cinTable[handle].bufU, cinTable[handle].bufV, cinTable[handle].bufY_stride, cinTable[handle].bufUV_stride,
@@ -1004,7 +842,7 @@ static void PlayCinematic(const char *arg, const char *s, qboolean qbInGame)
 		// 
 		// Fix display ratio
 
-		// While video header isn't loaded yet, we have need an assumption
+		// While video header isn't loaded yet, we make an assumption
 		// that OGV video has format 16:9 (while original ROQ videos are 4:3)
 #ifdef DECODER_OGV
 		const float VideoRatio = (Format == cinVideoFormat::VIDEO_OGV)
@@ -1016,12 +854,6 @@ static void PlayCinematic(const char *arg, const char *s, qboolean qbInGame)
 
 		float scrWidthOffs = ((float)cls.glconfig.vidWidth /* screen width */ - (float)cls.glconfig.vidHeight / VideoRatio /* desired width */) * 0.5f;
 		nScreenRatioFixOffset = (int)(scrWidthOffs * (float)SCREEN_WIDTH / (float)cls.glconfig.vidWidth);
-
-		if (!Q_stricmp(sShortFileName, "video/ja01"))
-		{
-			int i = 0;
-			i = 10;
-		}
 
 #if ASPECT_RATIO_FIX
 		if (ASPECT_RATIO_STRETCH_TO_HEIGHT /* stretch video to screen height */)
@@ -1035,8 +867,6 @@ static void PlayCinematic(const char *arg, const char *s, qboolean qbInGame)
 			}
 			else
 			{
-				SCR_FillRect(0, 0, nScreenRatioFixOffset, SCREEN_HEIGHT, g_color_table[0]);
-				SCR_FillRect(SCREEN_WIDTH - nScreenRatioFixOffset, 0, nScreenRatioFixOffset, SCREEN_HEIGHT, g_color_table[0]);
 				CL_handle = CIN_PlayCinematic(arg, nScreenRatioFixOffset, 0, SCREEN_WIDTH - nScreenRatioFixOffset * 2, SCREEN_HEIGHT, bits, psAudioFile);
 			}
 		}
@@ -1361,7 +1191,7 @@ cinVideoFormat ProcessVideoFileName(char* outFileName, int outSize, const char* 
 	char name_ogv[MAX_OSPATH];
 	Q_strncpyz(name_ogv, outFileName, MAX_OSPATH);
 
-	if (bShader || !videoDecoders[cinVideoFormat::VIDEO_OGV].DataFormatYUV(NULL)) {
+	if (bShader || !videoDecoders[cinVideoFormat::VIDEO_OGV].DataFormatYUV()) {
 		Q_strcat(name_ogv, MAX_OSPATH, "_sd.ogv");
 		if (FS_FileIsInPAK(name_ogv) <= 0) {
 			Q_strncpyz(name_ogv, outFileName, MAX_OSPATH);
@@ -1437,6 +1267,26 @@ static void CIN_StopVideo(cinematics_t* cin, cin_cache* table)
 	{
 		videoDecoders[table->videoFormat].Stop(currentHandle);
 	}
+
+	// Free image buffer
+	if (cin->linbuf)
+	{
+		Z_Free(cin->linbuf);
+		cin->linbuf = NULL;
+		cin->linbufCapacity = 0;
+	}
+	// Free roq status buffers
+	if (cin->qStatus[0])
+	{
+		Z_Free(cin->qStatus[0]);
+		cin->qStatus[0] = NULL;
+	}
+	if (cin->qStatus[1])
+	{
+		Z_Free(cin->qStatus[1]);
+		cin->qStatus[1] = NULL;
+	}
+	cin->qStatusCapacity = 0;
 	// Free audio buffer
 	if (table->audioBuffer)
 	{
