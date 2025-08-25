@@ -395,7 +395,7 @@ qboolean OGV_LoadBlockToSync()
 	{
 		buffer = ogg_sync_buffer(&g_ogm.sync_state, OGG_BUFFER_SIZE);
 		bytes = FS_Read(buffer /*ogv::cin_info.cin->file*/, OGG_BUFFER_SIZE, ogv::activeTable->iFile);
-		ogv::activeTable->RoQPlayed += OGG_BUFFER_SIZE;
+		ogv::activeTable->playedInBytes += OGG_BUFFER_SIZE;
 		ogg_sync_wrote(&g_ogm.sync_state, bytes);
 
 		r = (bytes == 0);
@@ -507,7 +507,7 @@ qboolean OGV_StartFile(int handle)
 	cin_cache* activeTable = &ogv::tables[handle];
 
 	activeTable->numQuads = -1;
-	activeTable->RoQPlayed = 0;
+	activeTable->playedInBytes = 0;
 
 	memset(&g_ogm, 0, sizeof(cin_ogv_t));
 	
@@ -620,7 +620,7 @@ qboolean OGV_StartFile(int handle)
 	activeTable->startTime = activeTable->lastTime = Sys_Milliseconds() * com_timescale->value;
 
 	/*	get frame rate */
-	activeTable->roqFPS = (g_ogm.th_info.fps_denominator > 0)
+	activeTable->decoderFPS = (g_ogm.th_info.fps_denominator > 0)
 		? (long)((double)g_ogm.th_info.fps_numerator / (double)g_ogm.th_info.fps_denominator)
 		: 30;
 
@@ -660,9 +660,6 @@ qboolean OGV_StartFile(int handle)
 		ogv::cin->linbufCapacity = twoFramesBufferSize;
 	}
 	activeTable->buf = ogv::cin->linbuf + activeTable->screenDelta;
-
-	activeTable->half = qfalse;
-	activeTable->smootheddouble = qfalse;
 
 	activeTable->t[0] = activeTable->screenDelta;
 	activeTable->t[1] = -activeTable->screenDelta;

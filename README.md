@@ -11,7 +11,17 @@ This is my attempt to improve quality of cinematics in JA SP. Two formats are su
 
 OGV libraries (**ogg** itself, **theora** video decoder and **vorbis** audio decoder) are included as bundled projects and (hopefully) should compile for Linux. There is UseInternalOGGVideo flag in the CMakeLists. Disable it to build the project without OGV support (but you still get 1k and 2k RoQ).
 
-Regardless of the specified extension of the video file name (if any specified), ogv has priority over roq. For example, if the script tried to read "video/ja02" or "video/ja02.roq", at first cl_cin.cpp would look for "video/jk02.ogv". To convert mp4-h264 video to OGV, use *ffmpeg2theora* or *Theora Converter .NET* (GUI for ffmpeg2theora). Keep in mind the game expects sample rate of audio in cinematics = 22050 Hz.
+Regardless of the specified extension of the video file name (if any specified), ogv has priority over roq. For example, if the script tried to read "video/ja02" or "video/ja02.roq", at first cl_cin.cpp would look for "video/jk02.ogv". I also added "_sd" suffix (in oppose to HD) for file names. SD videos are used when GPU acceleration isn't available. Back to the last example: if we try read "video/ja02" file, and there is "video/ja02_sd.ogv" available in the directory, the system would use ja02_sd.ogv instead of ja02.ogv in two cases: (a) when using vanilla renderer; (b) for render-to-texture pipline, for example, to draw a video in game menu.
+
+To play OGV on PC use *VLC Media Player*. To convert video to OGV use *ffmpeg2theora* or *Theora Converter .NET* (GUI for ffmpeg2theora). Keep in mind the game expects sample rate of audio in cinematics = 22,050 Hz.
+
+Convert video to mp4 with H264 and supported audio format (you can use another encoder and container - mp4 with mp3 is incorrect, but works in our case):
+
+> ffmpeg -i input.mp4 -c:v libx264 -c:a libmp3lame -ar 22050 -sample_fmt s16p formatted_input.mp4
+
+Convert prepared video to OGV with bitrate = 9000 kbps (supported value up to 16000):
+
+> ffmpeg2theora formatted_input.mp4 --videobitrate 9000 --pp default --audiobitrate 128 --two-pass --soft-target output.ogv
 
 ## Original Overview
 

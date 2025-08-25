@@ -443,43 +443,33 @@ typedef enum
 	MAX
 } cinVideoFormat;
 
-// @TODO: complete mess, need to move everything related to RoQ to local structure, like for OGV
+// This table describes active cinematic. Still a mess.
 typedef struct {
 	char				fileName[MAX_OSPATH];
-	int					CIN_WIDTH, CIN_HEIGHT; // actual frame size of input video (ex. 1920x1080)
-	int					xpos, ypos, width, height;
-	qboolean			looping, holdAtEnd, dirty, alterGameState, silent, shader;
+	int					CIN_WIDTH, CIN_HEIGHT;// actual input frame size of the video (ex. 1920x1080 or 512x512)
+	int					xpos, ypos, width, height; // target rectangle on screen to draw the video in
 	cinVideoFormat		videoFormat; // ogv or roq
-	fileHandle_t		iFile = NULL; // Video file handle to read data
+	fileHandle_t		iFile = NULL; // video file handle
+	long				playedInBytes; // how many bytes was read from the file
+	long				fileTotalSize; // total size of the videofile in bytes
 	e_status			status; // play status: playing, paused, EOF, looping
+	qboolean			dirty; // is frame buffer updated to draw?
 	unsigned int		startTime;
 	unsigned int		lastTime;
 	long				tfps;
-	long				RoQPlayed; // @TODO: move to roq child struct
-	long				ROQSize;
-	unsigned int		RoQFrameSize;
+
 	long				onQuad;
 	long				numQuads;
 	long				samplesPerLine;
-	unsigned int		roq_id;
 	long				screenDelta; // size in bytes of one image to draw
-
-	void				(*VQ0)(byte* status, void* qdata); // @TODO: move to videoroq
-	void				(*VQ1)(byte* status, void* qdata);
-	void				(*VQNormal)(byte* status, void* qdata);
-	void				(*VQBuffer)(byte* status, void* qdata);
-
+	long				decoderFPS;
 	long        		samplesPerPixel = 4; // R8G8B8A8
-	byte*				gray;
-	unsigned int		xsize, ysize, maxsize, minsize;
 
-	qboolean			half, smootheddouble, inMemory;
-	long				normalBuffer0;
-	long				roq_flags;
-	long				roqF0;
-	long				roqF1;
-	long				t[2];
-	long				roqFPS;
+	unsigned int		xsize, ysize; // can move to roq
+	long				t[2]; // can move to roq
+
+	// JA flags
+	qboolean			looping, holdAtEnd, alterGameState, silent, shader;
 	int					playonwalls;
 	sfxHandle_t			hSFX = NULL;
 	qhandle_t			hCRAWLTEXT = NULL;
@@ -496,13 +486,16 @@ typedef struct {
 	int					bufUV_stride = 0; // texture size (for example, 2048x2048 for 1920x1080 video)
 
 	// Actual buffer to store audio data, allocated by decoder and freed by CIN_StopVideo (the same way it should work for linbuf)
-	short*				audioBuffer;
+	short*				audioBuffer = NULL;
 	int					audioBufferCapacity = 0;
 
 	// buffer to process decoded video frame, only for OGV
 	// although shouldn't be used in most cases at all
 	byte*				frameBufferTemp = NULL;	// used in BlitFrameToTexture
 	int					frameBufferTempSize = 0;
+
+	// Additional decoder-specific settings, pointer to struct
+	void*				decoderSettings = NULL;
 } cin_cache;
 
 void CL_PlayCinematic_f( void );

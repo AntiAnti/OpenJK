@@ -321,7 +321,7 @@ e_status CIN_RunCinematic (int handle)
 	if (cinTable[currentHandle].shader && (abs(thisTime - (double)cinTable[currentHandle].lastTime))>100) {
 		cinTable[currentHandle].startTime += thisTime - cinTable[currentHandle].lastTime;
 	}
-	cinTable[currentHandle].tfps = ((((Sys_Milliseconds()*com_timescale->value) - cinTable[currentHandle].startTime)*cinTable[currentHandle].roqFPS)/1000);
+	cinTable[currentHandle].tfps = ((((Sys_Milliseconds()*com_timescale->value) - cinTable[currentHandle].startTime)*cinTable[currentHandle].DecoderFPS)/1000);
 
 	// process frame using active decoder
 	videoDecoders[cinTable[currentHandle].videoFormat].ReadFrame(currentHandle, thisTime);
@@ -378,10 +378,10 @@ int CIN_PlayCinematic( const char *arg, int x, int y, int w, int h, int systemBi
 	Q_strncpyz(cinTable[currentHandle].fileName, name, MAX_OSPATH);
 
 	cinTable[currentHandle].videoFormat = Format;
-	cinTable[currentHandle].ROQSize = 0;
-	cinTable[currentHandle].ROQSize = FS_FOpenFileRead (cinTable[currentHandle].fileName, &cinTable[currentHandle].iFile, qtrue);
+	cinTable[currentHandle].fileTotalSize = 0;
+	cinTable[currentHandle].fileTotalSize = FS_FOpenFileRead (cinTable[currentHandle].fileName, &cinTable[currentHandle].iFile, qtrue);
 
-	if (cinTable[currentHandle].ROQSize<=0) {
+	if (cinTable[currentHandle].fileTotalSize <= 0) {
 		Com_Printf(S_COLOR_RED"ERROR: playCinematic: %s not found!\n", arg);
 		cinTable[currentHandle].fileName[0] = 0;
 		return -1;

@@ -117,6 +117,29 @@ namespace roq {
 
 #define _clamp(value, vmin, vmax) (value > vmax ? vmax : (value < vmin ? vmin : value))
 
+// RoQ-specific cinematic parameters
+// I took parameters from original cl_cin.cpp and preserved original names of variables to make it easier to catch up for other devs
+typedef struct
+{
+	unsigned int		RoQFrameSize; // @TODO: move to roq child struct
+	unsigned int		RoQ_Id;
+
+	void				(*VQ0)(byte* status, void* qdata);
+	void				(*VQ1)(byte* status, void* qdata);
+	void				(*VQNormal)(byte* status, void* qdata);
+	void				(*VQBuffer)(byte* status, void* qdata);
+
+	byte*				gray; // unused (intended for greyscale displays)
+	unsigned int		maxsize;
+	unsigned int		minsize;
+
+	qboolean			half, smootheddouble, inMemory;
+	long				normalBuffer0;
+	long				roq_flags;
+	long				roqF0;
+	long				roqF1;
+} cin_roq_t;
+
 // Some preferenitions
 static void RoQ_init(cin_cache* table);
 void RoQInterrupt(int handle);
@@ -380,10 +403,12 @@ static void setupQuad(cin_cache* table, long xOff, long yOff)
 
 static void readQuadInfo(cin_cache* table, byte* qData)
 {
+	cin_roq_t* activeDecoderSettings = (cin_roq_t*)table->decoderSettings;
+
 	table->xsize = qData[0] + qData[1] * 256; //512
 	table->ysize = qData[2] + qData[3] * 256; //512
-	table->maxsize = qData[4] + qData[5] * 256; //8
-	table->minsize = qData[6] + qData[7] * 256; //4
+	activeDecoderSettings->maxsize = qData[4] + qData[5] * 256; //8
+	activeDecoderSettings->minsize = qData[6] + qData[7] * 256; //4
 
 	table->CIN_HEIGHT = table->ysize;
 	table->CIN_WIDTH = table->xsize;
@@ -401,11 +426,11 @@ static void readQuadInfo(cin_cache* table, byte* qData)
 	}
 	table->buf = roq::cin->linbuf + table->screenDelta;
 
-	table->half = qfalse;
-	table->smootheddouble = qfalse;
+	activeDecoderSettings->half = qfalse;
+	activeDecoderSettings->smootheddouble = qfalse;
 
-	table->VQ0 = table->VQNormal;
-	table->VQ1 = table->VQBuffer;
+	activeDecoderSettings->VQ0 = activeDecoderSettings->VQNormal;
+	activeDecoderSettings->VQ1 = activeDecoderSettings->VQBuffer;
 
 	table->t[0] = table->screenDelta;
 	table->t[1] = -table->screenDelta;
@@ -458,8 +483,9 @@ static void decodeCodeBook(cin_cache* table, byte* input, unsigned short roq_fla
 
 	bptr = (unsigned short*)vq2;
 
-	if (!table->half) {
-		if (!table->smootheddouble) {
+	cin_roq_t* activeDecoderSettings = (cin_roq_t*)table->decoderSettings;
+	if (!activeDecoderSettings->half) {
+		if (!activeDecoderSettings->smootheddouble) {
 			//
 			// normal height
 			//
@@ -517,10 +543,10 @@ static void decodeCodeBook(cin_cache* table, byte* input, unsigned short roq_fla
 			else if (table->samplesPerPixel == 1) {
 				bbptr = (byte*)bptr;
 				for (i = 0; i < two; i++) {
-					*bbptr++ = table->gray[*input++];
-					*bbptr++ = table->gray[*input++];
-					*bbptr++ = table->gray[*input++];
-					*bbptr++ = table->gray[*input]; input += 3;
+					*bbptr++ = activeDecoderSettings->gray[*input++];
+					*bbptr++ = activeDecoderSettings->gray[*input++];
+					*bbptr++ = activeDecoderSettings->gray[*input++];
+					*bbptr++ = activeDecoderSettings->gray[*input]; input += 3;
 				}
 
 				bcptr = (byte*)vq4;
@@ -608,14 +634,14 @@ static void decodeCodeBook(cin_cache* table, byte* input, unsigned short roq_fla
 					y1 = (long)*input++;
 					y2 = (long)*input++;
 					y3 = (long)*input; input += 3;
-					*bbptr++ = table->gray[y0];
-					*bbptr++ = table->gray[y1];
-					*bbptr++ = table->gray[((y0 * 3) + y2) / 4];
-					*bbptr++ = table->gray[((y1 * 3) + y3) / 4];
-					*bbptr++ = table->gray[(y0 + (y2 * 3)) / 4];
-					*bbptr++ = table->gray[(y1 + (y3 * 3)) / 4];
-					*bbptr++ = table->gray[y2];
-					*bbptr++ = table->gray[y3];
+					*bbptr++ = activeDecoderSettings->gray[y0];
+					*bbptr++ = activeDecoderSettings->gray[y1];
+					*bbptr++ = activeDecoderSettings->gray[((y0 * 3) + y2) / 4];
+					*bbptr++ = activeDecoderSettings->gray[((y1 * 3) + y3) / 4];
+					*bbptr++ = activeDecoderSettings->gray[(y0 + (y2 * 3)) / 4];
+					*bbptr++ = activeDecoderSettings->gray[(y1 + (y3 * 3)) / 4];
+					*bbptr++ = activeDecoderSettings->gray[y2];
+					*bbptr++ = activeDecoderSettings->gray[y3];
 				}
 
 				bcptr = (byte*)vq4;
@@ -661,8 +687,8 @@ static void decodeCodeBook(cin_cache* table, byte* input, unsigned short roq_fla
 			bbptr = (byte*)bptr;
 
 			for (i = 0; i < two; i++) {
-				*bbptr++ = table->gray[*input]; input += 2;
-				*bbptr++ = table->gray[*input]; input += 4;
+				*bbptr++ = activeDecoderSettings->gray[*input]; input += 2;
+				*bbptr++ = activeDecoderSettings->gray[*input]; input += 4;
 			}
 
 			bcptr = (byte*)vq4;
@@ -878,14 +904,16 @@ static void RoQPrepMcomp(long xoff, long yoff)
 {
 	long i, j, x, y, temp, temp2;
 
+	cin_roq_t* activeDecoderSettings = (cin_roq_t*)roq::activeTable->decoderSettings;
+
 	i = roq::activeTable->samplesPerLine; j = roq::activeTable->samplesPerPixel;
-	if (roq::activeTable->xsize == (roq::activeTable->ysize * 4) && !roq::activeTable->half) { j = j + j; i = i + i; }
+	if (roq::activeTable->xsize == (roq::activeTable->ysize * 4) && !activeDecoderSettings->half) { j = j + j; i = i + i; }
 
 	for (y = 0; y < 16; y++) {
 		temp2 = (y + yoff - 8) * i;
 		for (x = 0; x < 16; x++) {
 			temp = (x + xoff - 8) * j;
-			roq::cin->mcomp[(x * 16) + y] = roq::activeTable->normalBuffer0 - (temp2 + temp);
+			roq::cin->mcomp[(x * 16) + y] = activeDecoderSettings->normalBuffer0 - (temp2 + temp);
 		}
 	}
 }
@@ -901,21 +929,22 @@ static void RoQPrepMcomp(long xoff, long yoff)
 static void RoQ_init(cin_cache* table)
 {
 	roq::activeTable = table;
+	cin_roq_t* activeDecoderSettings = (cin_roq_t*)table->decoderSettings;
 
 	table->startTime = table->lastTime = Sys_Milliseconds() * com_timescale->value;
-	table->RoQPlayed = 24;
+	table->playedInBytes = 24;
 
 	/*	get frame rate */
-	table->roqFPS = roq::cin->file[6] + roq::cin->file[7] * 256;
+	table->decoderFPS = roq::cin->file[6] + roq::cin->file[7] * 256;
 
-	if (!table->roqFPS) table->roqFPS = 30;
+	if (!table->decoderFPS) table->decoderFPS = 30;
 
 	table->numQuads = -1;
-	table->roq_id = roq::cin->file[8] + roq::cin->file[9] * 256;
-	table->RoQFrameSize = roq::cin->file[10] + roq::cin->file[11] * 256 + roq::cin->file[12] * 65536;
-	table->roq_flags = roq::cin->file[14] + roq::cin->file[15] * 256;
+	activeDecoderSettings->RoQ_Id = roq::cin->file[8] + roq::cin->file[9] * 256;
+	activeDecoderSettings->RoQFrameSize = roq::cin->file[10] + roq::cin->file[11] * 256 + roq::cin->file[12] * 65536;
+	activeDecoderSettings->roq_flags = roq::cin->file[14] + roq::cin->file[15] * 256;
 
-	if (table->RoQFrameSize > MAX_ROQ_FRAME_SIZE || !table->RoQFrameSize)
+	if (activeDecoderSettings->RoQFrameSize > MAX_ROQ_FRAME_SIZE || !activeDecoderSettings->RoQFrameSize)
 	{
 		return;
 	}
@@ -967,8 +996,16 @@ qboolean ROQ_StartFile(int handle)
 	}
 	else return qfalse;
 
-	roq::activeTable->VQNormal = (void (*)(byte*, void*))blitVQQuad32fs;
-	roq::activeTable->VQBuffer = (void (*)(byte*, void*))blitVQQuad32fs;
+	if (roq::activeTable->decoderSettings)
+	{
+		Z_Free(roq::activeTable->decoderSettings);
+	}
+	roq::activeTable->decoderSettings = Z_Malloc(sizeof(cin_roq_t), TAG_TEMP_WORKSPACE);
+	cin_roq_t* activeDecoderSettings = (cin_roq_t*)roq::activeTable->decoderSettings;
+	memset(activeDecoderSettings, 0, sizeof(cin_roq_t));
+
+	activeDecoderSettings->VQNormal = (void (*)(byte*, void*))blitVQQuad32fs;
+	activeDecoderSettings->VQBuffer = (void (*)(byte*, void*))blitVQQuad32fs;
 	roq::activeTable->samplesPerPixel = 4;
 
 	FS_Read(roq::cin->file, 16, roq::activeTable->iFile);
@@ -1054,7 +1091,7 @@ void ROQ_ReadFrame(int handle, int thisTime)
 		RoQInterrupt(handle);
 
 		if ((unsigned)start != roq::activeTable->startTime) {
-			roq::activeTable->tfps = ((((Sys_Milliseconds() * com_timescale->value) - roq::activeTable->startTime) * roq::activeTable->roqFPS) / 1000);
+			roq::activeTable->tfps = ((((Sys_Milliseconds() * com_timescale->value) - roq::activeTable->startTime) * roq::activeTable->decoderFPS) / 1000);
 			start = roq::activeTable->startTime;
 		}
 	}
@@ -1073,8 +1110,10 @@ void RoQInterrupt(int handle)
 	byte* framedata;
 	int ssize;
 
-	FS_Read(roq::cin->file, roq::activeTable->RoQFrameSize + 8, roq::activeTable->iFile);
-	if (roq::activeTable->RoQPlayed >= roq::activeTable->ROQSize) {
+	cin_roq_t* activeDecoderSettings = (cin_roq_t*)roq::activeTable->decoderSettings;
+
+	FS_Read(roq::cin->file, activeDecoderSettings->RoQFrameSize + 8, roq::activeTable->iFile);
+	if (roq::activeTable->playedInBytes >= roq::activeTable->fileTotalSize) {
 		if (roq::activeTable->holdAtEnd == qfalse) {
 			if (roq::activeTable->looping) {
 				ROQ_Reset(handle);
@@ -1094,24 +1133,24 @@ void RoQInterrupt(int handle)
 	// new frame is ready
 	//
 redump:
-	switch (roq::activeTable->roq_id)
+	switch (activeDecoderSettings->RoQ_Id)
 	{
 	case	ROQ_QUAD_VQ:
 		if ((roq::activeTable->numQuads & 1)) {
-			roq::activeTable->normalBuffer0 = roq::activeTable->t[1];
-			RoQPrepMcomp(roq::activeTable->roqF0, roq::activeTable->roqF1);
+			activeDecoderSettings->normalBuffer0 = roq::activeTable->t[1];
+			RoQPrepMcomp(activeDecoderSettings->roqF0, activeDecoderSettings->roqF1);
 			if (roq::cin->qStatus[1]) // dirty, but works
 			{
-				roq::activeTable->VQ1((byte*)roq::cin->qStatus[1], framedata);
+				activeDecoderSettings->VQ1((byte*)roq::cin->qStatus[1], framedata);
 			}
 			roq::activeTable->buf = roq::cin->linbuf + roq::activeTable->screenDelta;
 		}
 		else {
-			roq::activeTable->normalBuffer0 = roq::activeTable->t[0];
-			RoQPrepMcomp(roq::activeTable->roqF0, roq::activeTable->roqF1);
+			activeDecoderSettings->normalBuffer0 = roq::activeTable->t[0];
+			RoQPrepMcomp(activeDecoderSettings->roqF0, activeDecoderSettings->roqF1);
 			if (roq::cin->qStatus[0]) // dirty, but works
 			{
-				roq::activeTable->VQ0((byte*)roq::cin->qStatus[0], framedata);
+				activeDecoderSettings->VQ0((byte*)roq::cin->qStatus[0], framedata);
 			}
 			roq::activeTable->buf = roq::cin->linbuf;
 		}
@@ -1122,11 +1161,11 @@ redump:
 		roq::activeTable->dirty = qtrue;
 		break;
 	case	ROQ_CODEBOOK:
-		decodeCodeBook(roq::activeTable, framedata, (unsigned short)roq::activeTable->roq_flags);
+		decodeCodeBook(roq::activeTable, framedata, (unsigned short)activeDecoderSettings->roq_flags);
 		break;
 	case	ZA_SOUND_MONO:
 		if (!roq::activeTable->silent) {
-			ssize = RllDecodeMonoToStereo(framedata, roq::activeTable->audioBuffer, roq::activeTable->RoQFrameSize, 0, (unsigned short)roq::activeTable->roq_flags);
+			ssize = RllDecodeMonoToStereo(framedata, roq::activeTable->audioBuffer, activeDecoderSettings->RoQFrameSize, 0, (unsigned short)activeDecoderSettings->roq_flags);
 			S_RawSamples(ssize, 22050, 2, 1, (byte*)roq::activeTable->audioBuffer, s_volume->value, qtrue);
 		}
 		break;
@@ -1136,7 +1175,7 @@ redump:
 				S_Update();
 				s_rawend = s_soundtime;
 			}
-			ssize = RllDecodeStereoToStereo(framedata, roq::activeTable->audioBuffer, roq::activeTable->RoQFrameSize, 0, (unsigned short)roq::activeTable->roq_flags);
+			ssize = RllDecodeStereoToStereo(framedata, roq::activeTable->audioBuffer, activeDecoderSettings->RoQFrameSize, 0, (unsigned short)activeDecoderSettings->roq_flags);
 			S_RawSamples(ssize, 22050, 2, 2, (byte*)roq::activeTable->audioBuffer, s_volume->value, qtrue);
 		}
 		break;
@@ -1149,11 +1188,11 @@ redump:
 		if (roq::activeTable->numQuads != 1) roq::activeTable->numQuads = 0;
 		break;
 	case	ROQ_PACKET:
-		roq::activeTable->inMemory = (qboolean)roq::activeTable->roq_flags;
-		roq::activeTable->RoQFrameSize = 0;           // for header
+		activeDecoderSettings->inMemory = (qboolean)activeDecoderSettings->roq_flags;
+		activeDecoderSettings->RoQFrameSize = 0;           // for header
 		break;
 	case	ROQ_QUAD_HANG:
-		roq::activeTable->RoQFrameSize = 0;
+		activeDecoderSettings->RoQFrameSize = 0;
 		break;
 	case	ROQ_QUAD_JPEG:
 		break;
@@ -1164,7 +1203,7 @@ redump:
 	//
 	// read in next frame data
 	//
-	if (roq::activeTable->RoQPlayed >= roq::activeTable->ROQSize) {
+	if (roq::activeTable->playedInBytes >= roq::activeTable->fileTotalSize) {
 		if (roq::activeTable->holdAtEnd == qfalse) {
 			if (roq::activeTable->looping) {
 				ROQ_Reset(handle);
@@ -1179,14 +1218,14 @@ redump:
 		return;
 	}
 
-	framedata += roq::activeTable->RoQFrameSize;
-	roq::activeTable->roq_id = framedata[0] + framedata[1] * 256;
-	roq::activeTable->RoQFrameSize = framedata[2] + framedata[3] * 256 + framedata[4] * 65536;
-	roq::activeTable->roq_flags = framedata[6] + framedata[7] * 256;
-	roq::activeTable->roqF0 = (signed char)framedata[7];
-	roq::activeTable->roqF1 = (signed char)framedata[6];
+	framedata += activeDecoderSettings->RoQFrameSize;
+	activeDecoderSettings->RoQ_Id = framedata[0] + framedata[1] * 256;
+	activeDecoderSettings->RoQFrameSize = framedata[2] + framedata[3] * 256 + framedata[4] * 65536;
+	activeDecoderSettings->roq_flags = framedata[6] + framedata[7] * 256;
+	activeDecoderSettings->roqF0 = (signed char)framedata[7];
+	activeDecoderSettings->roqF1 = (signed char)framedata[6];
 
-	if (roq::activeTable->RoQFrameSize > MAX_ROQ_FRAME_SIZE || roq::activeTable->roq_id == 0x1084) {
+	if (activeDecoderSettings->RoQFrameSize > MAX_ROQ_FRAME_SIZE || activeDecoderSettings->RoQ_Id == 0x1084) {
 		Com_DPrintf("roq_size>65536||roq_id==0x1084\n");
 		roq::activeTable->status = FMV_EOF;
 		if (roq::activeTable->looping) {
@@ -1194,9 +1233,9 @@ redump:
 		}
 		return;
 	}
-	if (roq::activeTable->inMemory && (roq::activeTable->status != FMV_EOF))
+	if (activeDecoderSettings->inMemory && (roq::activeTable->status != FMV_EOF))
 	{
-		roq::activeTable->inMemory = (qboolean)(((int)roq::activeTable->inMemory) - 1);
+		activeDecoderSettings->inMemory = (qboolean)(((int)activeDecoderSettings->inMemory) - 1);
 		framedata += 8;
 		goto redump;
 	}
@@ -1205,7 +1244,7 @@ redump:
 	//
 	//	assert(roq::activeTable->RoQFrameSize <= 65536);
 	//	r = FS_Read( roq::cin->file, roq::activeTable->RoQFrameSize+8, roq::activeTable->iFile );
-	roq::activeTable->RoQPlayed += roq::activeTable->RoQFrameSize + 8;
+	roq::activeTable->playedInBytes += activeDecoderSettings->RoQFrameSize + 8;
 }
 
 /******************************************************************************
@@ -1223,6 +1262,12 @@ void ROQ_StopVideo(int handle)
 		roq::activeTable = &roq::tables[handle];
 	}
 	else return;
+
+	if (roq::activeTable->decoderSettings)
+	{
+		Z_Free(roq::activeTable->decoderSettings);
+		roq::activeTable->decoderSettings = NULL;
+	}
 }
 
 /******************************************************************************
