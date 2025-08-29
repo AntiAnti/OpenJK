@@ -457,6 +457,7 @@ typedef struct {
 	unsigned int		startTime;
 	unsigned int		lastTime;
 	long				tfps;
+	int					playbackDelay = -1;
 
 	long				onQuad;
 	long				numQuads;

@@ -51,8 +51,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // audio processing is under development, everything has to change
 #define SIZEOF_RAWBUFF		(2*2 * 1024*16)
-#define MIN_AUDIO_PRELOAD	500		/* 200 in ms */
-#define MAX_AUDIO_PRELOAD	8000	/*4096*/
+#define MIN_AUDIO_PRELOAD	200		/* 500 in ms */
+#define MAX_AUDIO_PRELOAD	2800	/* 8000 ms */
 
 #define _clamp(value, vmin, vmax) (value > vmax ? vmax : (value < vmin ? vmin : value))
 #define _texture_frame_mismatch(table) (table->drawX != table->CIN_WIDTH || table->drawY != table->CIN_HEIGHT)
@@ -79,6 +79,7 @@ typedef struct
 
 	// decoded audio data
 	ogg_int64_t				audioQueuedPairs;	// audio samples pushed to mixed
+	unsigned int			audioBufferUsed = 0;
 } cin_ogv_t;
 
 cin_ogv_t					g_ogms[16];			// OGV data
@@ -158,6 +159,12 @@ void OGV_BlitFrameToTexture(int frameWidth, int frameHeight)
 			bufferSrc -= oldLineSize;
 			bufferDest -= newLineSize;
 		}
+
+		if (frameHeight < ogv::activeTable->drawY)
+		{
+			bufferDest = ogv::activeTable->buf + frameHeight * newLineSize;
+			memset(bufferDest, 0x00, newLineSize);
+		}
 	}
 	else // need to use temp buffer
 	{
@@ -172,8 +179,7 @@ void OGV_BlitFrameToTexture(int frameWidth, int frameHeight)
 qboolean OGV_DataFormatYUV()
 {
 	// We DON'T process on GPU video rendered to texture (see CIN_UploadCinematic)
-	//if (table && table->shader) return qfalse;
-	// We can process on GPU video if we use rend2
+	// We can process video on GPU if we use rend2
 	return (qboolean)(Q_stristr(cl_renderer->string, "rend2") != NULL);
 }
 
@@ -190,9 +196,10 @@ int OGV_LoadVideoFrame()
 	auto& g_ogm = g_ogms[ogv::activeHandle];
 
 	ogg_packet op;
+	int thisTimeA = Sys_Milliseconds();
+	int cumulatedDecodeTime = 0;
 	while (ogg_stream_packetout(&g_ogm.stream_video, &op) > 0)
 	{
-		int thisTimeA = Sys_Milliseconds();
 		ogg_int64_t th_frame;
 
 		theora_decode_packetin(&g_ogm.th_state, &op);
@@ -216,7 +223,7 @@ int OGV_LoadVideoFrame()
 
 			yuv_buffer* yuv = &g_ogm.th_yuvbuffer;
 			if (OGV_DataFormatYUV() && !ogv::activeTable->shader) {
-				// rend2: let's process video frame on GPU
+				// rend2: process video frame on GPU
 
 				// let's hope offsets are zero
 				//ogg_uint32_t offset_x = g_ogm.th_info.offset_x;
@@ -255,12 +262,20 @@ int OGV_LoadVideoFrame()
 
 			int thisTimeD = Sys_Milliseconds();
 			// Debug
-			if (thisTimeD - thisTimeA > 25)
+			if (thisTimeD - thisTimeA > 25) //1000 / ogv::activeTable->decoderFPS)
 			{
 				Com_Printf("Frame decode: %d | yuv-to-rgb32: %d | blit: %d\n", thisTimeB - thisTimeA, thisTimeC - thisTimeB, thisTimeD - thisTimeC);
 			}
 
 			return 1; // has frame
+		}
+
+		cumulatedDecodeTime += (Sys_Milliseconds() - thisTimeA);
+		thisTimeA = Sys_Milliseconds();
+		if (cumulatedDecodeTime > 20)
+		{
+			Com_Printf("Decode time over limit: %d\n", cumulatedDecodeTime);
+			break;
 		}
 	}
 	return 0; // no frame
@@ -304,19 +319,75 @@ qboolean OGV_LoadAudio(cin_cache* table)
 		return qfalse;
 	}
 
+	int SamplesInBufferMs = (int)g_ogm.audioBufferUsed * 1000 /* ms in s */ / (int)(g_ogm.v_info.channels /* 2 */ * (int)g_ogm.v_info.rate /* 22050 */);
+
 	Com_Memset(&op, 0, sizeof(op));
 	Com_Memset(&vb, 0, sizeof(vb));
 	vorbis_block_init(&g_ogm.v_decoder, &vb);
 
-	int prevSamples = g_ogm.audioQueuedPairs;
+	while (couldObtainSomeData && (SamplesInBufferMs < MAX_AUDIO_PRELOAD))
+	{
+		couldObtainSomeData = qfalse;
+		int RemainingMsInBuffer = AudioBufferedMs();
 
-	//while (couldObtainSomeData && AudioBufferedMs() < MAX_AUDIO_PRELOAD)
+		// if there's pending, decoded audio, grab it 
+		frames = vorbis_synthesis_pcmout(&g_ogm.v_decoder, &pcm);
+		if (frames > 0)
+		{
+			frameNeeded = (SIZEOF_RAWBUFF - g_ogm.audioBufferUsed) / (OGG_PCM_SAMPLEWIDTH * g_ogm.v_info.channels);
+			if (frames < frameNeeded)
+			{
+				frameNeeded = frames;
+			}
+
+			// convert 32bit audio to 16bit 
+			short* ptr = &table->audioBuffer[g_ogm.audioBufferUsed];
+			for (int i = 0; i < frameNeeded; i++)
+			{
+				for (int j = 0; j < g_ogm.v_info.channels; j++)
+				{
+					*(ptr++) = (short)(_clamp(pcm[j][i], -1.f, 1.f) * 32767.f);
+				}
+			}
+
+			if (g_ogm.audioQueuedPairs == 0) {
+				S_Update();
+				s_rawend = s_soundtime;
+			}
+
+			//S_RawSamples(frameNeeded, (int)g_ogm.v_info.rate, OGG_PCM_SAMPLEWIDTH, g_ogm.v_info.channels, (byte*)table->audioBuffer, s_volume->value, qtrue);
+			g_ogm.audioQueuedPairs += frameNeeded;
+			g_ogm.audioBufferUsed += (frameNeeded * g_ogm.v_info.channels);
+			SamplesInBufferMs = (int)g_ogm.audioBufferUsed * 1000 / (int)(g_ogm.v_info.channels * (int)g_ogm.v_info.rate);
+
+			// tell libvorbis how many samples we actually consumed (we ate them all!)
+			vorbis_synthesis_read(&g_ogm.v_decoder, frameNeeded);
+			couldObtainSomeData = qtrue;
+		}
+		else
+		{
+			// no pending audio; is there a pending packet to decode?
+			if (ogg_stream_packetout(&g_ogm.stream_audio, &op))
+			{
+				if (vorbis_synthesis(&vb, &op) == 0)
+				{
+					vorbis_synthesis_blockin(&g_ogm.v_decoder, &vb);
+				}
+				couldObtainSomeData = qtrue;
+			}
+		}
+	}
+
+	vorbis_block_clear(&vb);
+	
+	return (qboolean)(SamplesInBufferMs < MIN_AUDIO_PRELOAD);
+	/*
 	while (couldObtainSomeData && ((g_ogm.currentTime + MAX_AUDIO_PRELOAD) > (int)(g_ogm.v_decoder.granulepos * 1000 / g_ogm.v_info.rate)))
 	{
 		couldObtainSomeData = qfalse;
 		int RemainingMsInBuffer = AudioBufferedMs();
 
-		/* if there's pending, decoded audio, grab it */
+		// if there's pending, decoded audio, grab it
 		frames = vorbis_synthesis_pcmout(&g_ogm.v_decoder, &pcm);
 		if (frames > 0)
 		{
@@ -327,7 +398,7 @@ qboolean OGV_LoadAudio(cin_cache* table)
 			}
 
 			// convert 32bit audio to 16bit 
-			short* ptr = table->audioBuffer;
+			short* ptr = &table->audioBuffer[g_ogm.audioBufferUsed];
 			for (int i = 0; i < frameNeeded; i++)
 			{
 				for (int j = 0; j < g_ogm.v_info.channels; j++)
@@ -336,21 +407,14 @@ qboolean OGV_LoadAudio(cin_cache* table)
 				}
 			}
 
-			// debug
-			/*
-			if (RemainingMsInBuffer < 100)
-			{
-				Com_Printf("s_soundtime: %d | s_rawend: %d | audioQueuedPairs: %d | RemainingMsInBuffer: %d\n", s_soundtime, s_rawend, g_ogm.audioQueuedPairs, RemainingMsInBuffer);
-			}
-			*/
-
 			if (g_ogm.audioQueuedPairs == 0) {
 				S_Update();
 				s_rawend = s_soundtime;
 			}
 
-			S_RawSamples(frameNeeded, (int)g_ogm.v_info.rate, OGG_PCM_SAMPLEWIDTH, g_ogm.v_info.channels, (byte*)table->audioBuffer, s_volume->value, qtrue);
+			//S_RawSamples(frameNeeded, (int)g_ogm.v_info.rate, OGG_PCM_SAMPLEWIDTH, g_ogm.v_info.channels, (byte*)table->audioBuffer, s_volume->value, qtrue);
 			g_ogm.audioQueuedPairs += frameNeeded;
+			g_ogm.audioBufferUsed += (frameNeeded * g_ogm.v_info.channels);
 
 			// tell libvorbis how many samples we actually consumed (we ate them all!)
 			vorbis_synthesis_read(&g_ogm.v_decoder, frameNeeded);
@@ -358,7 +422,7 @@ qboolean OGV_LoadAudio(cin_cache* table)
 		}
 		else
 		{
-			/* no pending audio; is there a pending packet to decode? */
+			// no pending audio; is there a pending packet to decode?
 			if (ogg_stream_packetout(&g_ogm.stream_audio, &op))
 			{
 				if (vorbis_synthesis(&vb, &op) == 0)
@@ -373,6 +437,7 @@ qboolean OGV_LoadAudio(cin_cache* table)
 	vorbis_block_clear(&vb);
 
 	return (qboolean)(g_ogm.currentTime + MIN_AUDIO_PRELOAD > (int)(g_ogm.v_decoder.granulepos * 1000 / g_ogm.v_info.rate));
+	*/
 }
 
 /******************************************************************************
@@ -447,7 +512,7 @@ int OGV_LoadPagesToStreams()
 		}
 	}
 
-	if (AudioPages && VideoPages)
+	if (AudioPages || VideoPages)
 	{
 		r = 0;
 	}
@@ -630,6 +695,7 @@ qboolean OGV_StartFile(int handle)
 	}
 
 	g_ogm.audioQueuedPairs = 0;
+	g_ogm.audioBufferUsed = 0;
 	activeTable->xsize = activeTable->drawX = g_ogm.th_info.frame_width;
 	activeTable->ysize = activeTable->drawY = g_ogm.th_info.frame_height;
 	activeTable->CIN_WIDTH = activeTable->xsize;
@@ -670,10 +736,6 @@ qboolean OGV_StartFile(int handle)
 	activeTable->drawY = _clamp(activeTable->drawY, 1, cls.glconfig.maxTextureSize);
 	if (_texture_frame_mismatch(activeTable))
 	{
-		if (activeTable->CIN_WIDTH != 256 || activeTable->CIN_HEIGHT != 256) {
-			Com_Printf("HACK: approxmimating cinematic for Rage Pro or Voodoo\n");
-		}
-
 		// prepare temp buffer for BlitFrameToTexture
 		long totalOffsetBytes = (activeTable->drawX * activeTable->samplesPerPixel) * (activeTable->CIN_HEIGHT - 1);
 		long totalInFrameSizeBytes = (activeTable->CIN_WIDTH + 16 /* keep pad for alignment */) * activeTable->CIN_HEIGHT * activeTable->samplesPerPixel;
@@ -765,7 +827,7 @@ qboolean OGVInterrupt(cin_cache* table)
 		}
 	}
 
-	return (qboolean)anyDataTransferred;
+	return (qboolean)(anyDataTransferred || status);
 }
 
 /******************************************************************************
@@ -818,6 +880,23 @@ void OGV_ReadFrame(int handle, int timeNow)
 			}
 		}
 	}
+
+	// Need to push audio?
+	const int framesPerSecond = g_ogm.v_info.channels * g_ogm.v_info.rate;
+	int bufferedAudioInEngineMs = (s_rawend - s_soundtime) * 1000 / g_ogm.v_info.rate;
+
+	if ((bufferedAudioInEngineMs < 150 && g_ogm.audioBufferUsed > 0) || ((g_ogm.audioBufferUsed / framesPerSecond) > 2000)) // || g_ogm.audioBufferUsed  > framesPerSecond) // || g_ogm.audioBufferUsed * 1000 / framesPerSecond > MAX_AUDIO_PRELOAD
+	{
+		S_RawSamples(g_ogm.audioBufferUsed / g_ogm.v_info.channels, (int)g_ogm.v_info.rate, OGG_PCM_SAMPLEWIDTH, g_ogm.v_info.channels, (byte*)table->audioBuffer, s_volume->value, qtrue);
+
+		//Com_Printf("remaining sound samples: %d | push %d samples\n", bufferedAudioInEngineMs, (g_ogm.audioBufferUsed * 1000 / framesPerSecond));
+
+		g_ogm.audioBufferUsed = 0;
+	}
+	else
+	{
+		//Com_Printf("remaining sound samples: %d\n", bufferedAudioInEngineMs);
+	}	
 }
 
 /******************************************************************************

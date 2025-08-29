@@ -21,7 +21,7 @@ Convert video to mp4 with H264 and supported audio format (you can use another e
 
 Convert prepared video to OGV with bitrate = 9000 kbps (supported value up to 16000):
 
-> ffmpeg2theora formatted_input.mp4 --videobitrate 9000 --pp default --audiobitrate 128 --two-pass --soft-target output.ogv
+> ffmpeg2theora formatted_input.mp4 --videobitrate 9000 --pp default --audiobitrate 128 --two-pass --soft-target
 
 ## Original Overview
 

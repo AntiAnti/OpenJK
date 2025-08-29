@@ -358,7 +358,7 @@ static void R_InitVideoRenderingShader()
 			int tex_width = (j == 0) ? 4096 : 2048; // Y is full, U/V is half
 			int tex_height = (j == 0) ? 2048 : 1024; // Y is full, U/V is half
 
-			tr.scratchYUVTextures[i][j] = R_CreateImage(tex_names[j], NULL, tex_width, tex_height, imgType_t::IMGTYPE_COLORALPHA, 0, 0);
+			tr.scratchYUVTextures[i][j] = R_CreateImage(tex_names[j], NULL, tex_width, tex_height, imgType_t::IMGTYPE_COLORALPHA, imgFlags_t::IMGFLAG_NO_COMPRESSION, 0);
 			GL_Bind(tr.scratchYUVTextures[i][j]);
 
 			qglTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tex_width, tex_height, 0, GL_R, GL_UNSIGNED_BYTE, NULL);

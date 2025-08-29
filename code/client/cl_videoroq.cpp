@@ -440,6 +440,7 @@ static void readQuadInfo(cin_cache* table, byte* qData)
 
 	// This safety check is completely unnecessary for all videocards since voodoo2
 	// Unless you try to feed the game a video with resolution higher than 16K
+	/*
 	if (table->drawX != table->CIN_WIDTH || table->drawY != table->CIN_HEIGHT)
 	{
 		if (table->CIN_WIDTH != 256 || table->CIN_HEIGHT != 256) {
@@ -449,6 +450,7 @@ static void readQuadInfo(cin_cache* table, byte* qData)
 		table->drawX = 256;
 		table->drawY = 256;
 	}
+	*/
 }
 
 /******************************************************************************
@@ -1136,7 +1138,7 @@ redump:
 	switch (activeDecoderSettings->RoQ_Id)
 	{
 	case	ROQ_QUAD_VQ:
-		if ((roq::activeTable->numQuads & 1)) {
+		if (roq::activeTable->numQuads & 1) {
 			activeDecoderSettings->normalBuffer0 = roq::activeTable->t[1];
 			RoQPrepMcomp(activeDecoderSettings->roqF0, activeDecoderSettings->roqF1);
 			if (roq::cin->qStatus[1]) // dirty, but works

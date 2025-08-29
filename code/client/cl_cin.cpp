@@ -85,7 +85,7 @@ typedef struct {
 	void (*ReadFrame)(int handle, int timeNow);
 	void (*ResetToStart)(int handle);
 	void (*Stop)(int handle);
-	qboolean(*DataFormatYUV)(); // qtrue if YUV, qfalse if RGB32
+	qboolean (*DataFormatYUV)(); // qtrue if YUV, qfalse if RGB32
 } videoDecoder;
 
 static videoDecoder videoDecoders[] =
@@ -321,7 +321,7 @@ e_status CIN_RunCinematic (int handle)
 	if (cinTable[currentHandle].shader && (abs(thisTime - (double)cinTable[currentHandle].lastTime))>100) {
 		cinTable[currentHandle].startTime += thisTime - cinTable[currentHandle].lastTime;
 	}
-	cinTable[currentHandle].tfps = ((((Sys_Milliseconds()*com_timescale->value) - cinTable[currentHandle].startTime)*cinTable[currentHandle].DecoderFPS)/1000);
+	cinTable[currentHandle].tfps = ((((Sys_Milliseconds()*com_timescale->value) - cinTable[currentHandle].startTime)*cinTable[currentHandle].decoderFPS)/1000);
 
 	// process frame using active decoder
 	videoDecoders[cinTable[currentHandle].videoFormat].ReadFrame(currentHandle, thisTime);
@@ -397,6 +397,8 @@ int CIN_PlayCinematic( const char *arg, int x, int y, int w, int h, int systemBi
 	cinTable[currentHandle].playonwalls = 1;
 	cinTable[currentHandle].silent = (qboolean)((systemBits & CIN_silent) != 0);
 	cinTable[currentHandle].shader = bShader;
+	cinTable[currentHandle].playbackDelay = -1;
+
 	if (psAudioFile)
 	{
 		cinTable[currentHandle].hSFX = S_RegisterSound(psAudioFile);
@@ -503,14 +505,7 @@ static void CIN_AddTextCrawl()
 	if (cls.realtime-CL_iPlaybackStartTime >= (TC_STOPTIME-2500))
 	{
 		fadeDown = (TC_STOPTIME - (cls.realtime-CL_iPlaybackStartTime))/ 2480.0f;
-		if (fadeDown < 0)
-		{
-			fadeDown = 0;
-		}
-		if (fadeDown > 1)
-		{
-			fadeDown = 1;
-		}
+		fadeDown = _clamp(fadeDown, 0.f, 1.f);
 	}
 	for ( int i = 0; i < 4; i++ )
 	{
@@ -643,9 +638,17 @@ void CIN_DrawCinematic (int handle) {
 		// always render "holdAtEnd" videos, even if it has no new frame
 		cinTable[handle].dirty = qtrue;
 	}
+	if (cinTable[handle].playbackDelay < 0)// && Sys_Milliseconds() - cinTable[handle].startTime > 30)
+	{
+		cinTable[handle].playbackDelay = Sys_Milliseconds() - cinTable[handle].startTime;
+		if (cinTable[handle].playbackDelay < 0) cinTable[handle].playbackDelay = 0;
+	}
+
+	//int bufferedAudioInEngineMs = (s_rawend - s_soundtime) * 1000 / 22050;
+	//Com_Printf("remaining sound samples: %d\n", bufferedAudioInEngineMs);
 
 	// Is video frame resampled to max texture size supported by videocard?
-	if (cinTable[handle].dirty && (cinTable[handle].CIN_WIDTH != cinTable[handle].drawX || cinTable[handle].CIN_HEIGHT != cinTable[handle].drawY)) {
+	if (/*cinTable[handle].dirty &&*/ (cinTable[handle].CIN_WIDTH != cinTable[handle].drawX || cinTable[handle].CIN_HEIGHT != cinTable[handle].drawY)) {
 		if (cinTable[handle].drawX == 256 && cinTable[handle].drawY == 256)
 		{
 			// legacy stub for pre-voodoo2 videocards
@@ -668,7 +671,7 @@ void CIN_DrawCinematic (int handle) {
 			}
 			else {
 				int newWidth = (w * cinTable[handle].drawX / cinTable[handle].CIN_WIDTH);
-				int newHeight = (h * cinTable[handle].drawX / cinTable[handle].CIN_HEIGHT);
+				int newHeight = (h * cinTable[handle].drawY / cinTable[handle].CIN_HEIGHT);
 				re.DrawStretchRaw(x, y, newWidth, newHeight, cinTable[handle].drawX, cinTable[handle].drawY, buf, handle, cinTable[handle].dirty);
 			}
 			cinTable[handle].dirty = qfalse;
@@ -684,7 +687,8 @@ void CIN_DrawCinematic (int handle) {
 		SCR_FillRect(SCREEN_WIDTH - nScreenRatioFixOffset, 0, nScreenRatioFixOffset, SCREEN_HEIGHT, g_color_table[0] /* black color */);
 	}
 
-	if (cinTable[handle].dirty)
+	// For an unknown reason something else updates the screen when playing video/ja05, so we need to update here regardless of the dirty state	
+	// if (cinTable[handle].dirty)
 	{
 		if (videoDecoders[cinTable[handle].videoFormat].DataFormatYUV() && !cinTable[handle].shader) {
 			// video decoder uses YUV420, and renderer supports it
@@ -858,7 +862,7 @@ static void PlayCinematic(const char *arg, const char *s, qboolean qbInGame)
 #if ASPECT_RATIO_FIX
 		if (ASPECT_RATIO_STRETCH_TO_HEIGHT /* stretch video to screen height */)
 		{
-			bool bHardCodedStretchedVideo = bStarWarsText || !Q_stricmp(arg, "video/ja01.roq");
+			bool bHardCodedStretchedVideo = false;// bStarWarsText || !Q_stricmp(arg, "video/ja01.roq");
 
 			if (bHardCodedStretchedVideo || nScreenRatioFixOffset < 5 || nScreenRatioFixOffset > SCREEN_WIDTH / 2)
 			{
