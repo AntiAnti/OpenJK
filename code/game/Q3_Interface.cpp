@@ -994,14 +994,23 @@ returns qtrue if changed to ms
 static qboolean G_AddSexToPlayerString ( char *string, qboolean qDoBoth )
 {
 	char *start;
-
+	
 	if VALIDSTRING( string ) {
-		if ( g_sex->string[0] == 'f' ) {
-			start = strstr( string, "jaden_male/" );
+		char snddir[MAX_QPATH] = "jaden_fmle";
+
+#ifdef JADEN_VOICES_CUSTOM
+		gi.Cvar_VariableStringBuffer("snd", snddir, MAX_QPATH);
+#else
+		if ( g_sex->string[0] == 'f' )
+#endif
+		{
+			char* start = strstr( string, "jaden_male/" );
+
 			if ( start != NULL ) {
-				strncpy( start, "jaden_fmle", 10 );
+				strncpy(start, snddir, 10);
 				return qtrue;
-			} else {
+			}
+			else {
 				start = strrchr( string, '/' );		//get the last slash before the wav
 				if (start != NULL) {
 					if (!strncmp( start, "/mr_", 4) ) {
@@ -1015,6 +1024,7 @@ static qboolean G_AddSexToPlayerString ( char *string, qboolean qDoBoth )
 				}	//IF found slash
 			}
 		}	//IF Female
+#ifndef JADEN_VOICES_CUSTOM
 		else {	//i'm male
 			start = strrchr( string, '/' );		//get the last slash before the wav
 			if (start != NULL) {
@@ -1023,6 +1033,7 @@ static qboolean G_AddSexToPlayerString ( char *string, qboolean qDoBoth )
 				}
 			}	//IF found slash
 		}
+#endif
 	}	//if VALIDSTRING
 	return qtrue;
 }
