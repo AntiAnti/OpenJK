@@ -991,18 +991,24 @@ And: Take any string, look for "/mr_" replace with "/ms_" based on "sex"
 returns qtrue if changed to ms
 =============
 */
+//#define JADEN_VOICES_CUSTOM
 static qboolean G_AddSexToPlayerString ( char *string, qboolean qDoBoth )
 {
 	char *start;
+	bool bUseCustomDirectory = false;
 	
-	if VALIDSTRING( string ) {
-		char snddir[MAX_QPATH] = "jaden_fmle";
-
+	if VALIDSTRING(string) {
+		char snddir[MAX_QPATH];
 #ifdef JADEN_VOICES_CUSTOM
 		gi.Cvar_VariableStringBuffer("snd", snddir, MAX_QPATH);
-#else
-		if ( g_sex->string[0] == 'f' )
+		bUseCustomDirectory = strlen(snddir) == 10 && !Q_stricmpn(snddir, "jaden_", 6);
 #endif
+		if (!bUseCustomDirectory)
+		{
+			Q_strncpyz(snddir, "jaden_fmle", MAX_QPATH);
+		}
+
+		if (bUseCustomDirectory || g_sex->string[0] == 'f')
 		{
 			char* start = strstr( string, "jaden_male/" );
 
@@ -1024,8 +1030,9 @@ static qboolean G_AddSexToPlayerString ( char *string, qboolean qDoBoth )
 				}	//IF found slash
 			}
 		}	//IF Female
-#ifndef JADEN_VOICES_CUSTOM
-		else {	//i'm male
+		else if (!bUseCustomDirectory)
+		{
+			//i'm male
 			start = strrchr( string, '/' );		//get the last slash before the wav
 			if (start != NULL) {
 				if (!strncmp( start, "/ms_", 4) ) {
@@ -1033,7 +1040,6 @@ static qboolean G_AddSexToPlayerString ( char *string, qboolean qDoBoth )
 				}
 			}	//IF found slash
 		}
-#endif
 	}	//if VALIDSTRING
 	return qtrue;
 }
