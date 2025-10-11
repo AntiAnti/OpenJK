@@ -335,6 +335,7 @@ qboolean OGV_LoadAudio(cin_cache* table)
 		if (frames > 0)
 		{
 			frameNeeded = (SIZEOF_RAWBUFF - g_ogm.audioBufferUsed) / (OGG_PCM_SAMPLEWIDTH * g_ogm.v_info.channels);
+			if (frameNeeded == 0) continue;
 			if (frames < frameNeeded)
 			{
 				frameNeeded = frames;

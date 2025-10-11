@@ -803,7 +803,7 @@ static void PlayCinematic(const char *arg, const char *s, qboolean qbInGame)
 		const char *psAudioFile	= NULL;
 		qhandle_t	hCrawl = 0;
 
-		const bool bStarWarsText = !Q_stricmp(sShortFileName, "video/jk0101_sw");
+		const bool bStarWarsText = (!Q_stricmp(sShortFileName, "video/jk0101_sw") || !Q_stricmp(sShortFileName, "video/jk0101_sw_sd"));
 		if (bStarWarsText)
 		{
 			psAudioFile = "music/cinematic_1";
