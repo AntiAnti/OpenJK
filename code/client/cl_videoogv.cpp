@@ -757,7 +757,7 @@ qboolean OGV_StartFile(int handle)
 	{
 		if (activeTable->audioBuffer) Z_Free(activeTable->audioBuffer);
 		activeTable->audioBufferCapacity = SIZEOF_RAWBUFF * 2;
-		activeTable->audioBuffer = (short*)Z_Malloc(activeTable->audioBufferCapacity*sizeof(short), TAG_TEMP_WORKSPACE);
+		activeTable->audioBuffer = (short*)Z_Malloc(activeTable->audioBufferCapacity * sizeof(short), TAG_TEMP_WORKSPACE);
 	}
 
 	activeTable->status = FMV_PLAY;
@@ -882,15 +882,21 @@ void OGV_ReadFrame(int handle, int timeNow)
 		}
 	}
 
+	float samplesScale = (float)g_ogm.v_info.rate / dma.speed; // 0.5 for 44100 Hz
+
 	// Need to push audio?
 	const int framesPerSecond = g_ogm.v_info.channels * g_ogm.v_info.rate;
-	int bufferedAudioInEngineMs = (s_rawend - s_soundtime) * 1000 / g_ogm.v_info.rate;
+	int bufferedAudioInEngineMs = (int)((float)(s_rawend - s_soundtime) * samplesScale * 1000.f / (float)g_ogm.v_info.rate);
 
-	if ((bufferedAudioInEngineMs < 150 && g_ogm.audioBufferUsed > 0) || ((g_ogm.audioBufferUsed / framesPerSecond) > 2000)) // || g_ogm.audioBufferUsed  > framesPerSecond) // || g_ogm.audioBufferUsed * 1000 / framesPerSecond > MAX_AUDIO_PRELOAD
+	if ((bufferedAudioInEngineMs < 450 && g_ogm.audioBufferUsed > 0) || ((g_ogm.audioBufferUsed / framesPerSecond) > 2000)) // || g_ogm.audioBufferUsed  > framesPerSecond) // || g_ogm.audioBufferUsed * 1000 / framesPerSecond > MAX_AUDIO_PRELOAD
 	{
-		S_RawSamples(g_ogm.audioBufferUsed / g_ogm.v_info.channels, (int)g_ogm.v_info.rate, OGG_PCM_SAMPLEWIDTH, g_ogm.v_info.channels, (byte*)table->audioBuffer, s_volume->value, qtrue);
+		int samplesToPush = g_ogm.audioBufferUsed / g_ogm.v_info.channels;
+		//Com_Printf("remaining sound samples: %d | push %d samples (dma.speed=%d)\n", (s_rawend - s_soundtime), samplesToPush, (int)dma.speed);
 
-		//Com_Printf("remaining sound samples: %d | push %d samples\n", bufferedAudioInEngineMs, (g_ogm.audioBufferUsed * 1000 / framesPerSecond));
+		S_RawSamples(samplesToPush, (int)g_ogm.v_info.rate, OGG_PCM_SAMPLEWIDTH, g_ogm.v_info.channels, (byte*)table->audioBuffer, s_volume->value, qtrue);
+
+		//Com_Printf("remaining sound samples: %d | push %d samples\n", bufferedAudioInEngineMs, (samplesToPush * 1000 / g_ogm.v_info.rate));
+		//Com_Printf("remaining sound samples: %d\n", (int)((float)(s_rawend - s_soundtime) * samplesScale));
 
 		g_ogm.audioBufferUsed = 0;
 	}
